@@ -40,26 +40,38 @@ def main() -> None:
     if not rows:
         raise SystemExit("No rows found in input CSV.")
 
-    labels = [row["scenario"] for row in rows]
-    t50 = [float(row["t50_mean"]) for row in rows]
-    t90 = [float(row["t90_mean"]) for row in rows]
-    t100 = [float(row["t100_mean"]) for row in rows]
-    messages = [float(row["messages_mean"]) for row in rows]
+    parsed = []
+    for row in rows:
+        parsed.append(
+            {
+                "label": row["scenario"],
+                "t50": float(row["t50_mean"]),
+                "t90": float(row["t90_mean"]),
+                "t100": float(row["t100_mean"]),
+                "messages": float(row["messages_mean"]),
+            }
+        )
+
+    parsed.sort(key=lambda item: item["t90"])
+    labels = [row["label"] for row in parsed]
+    t50 = [row["t50"] for row in parsed]
+    t90 = [row["t90"] for row in parsed]
+    t100 = [row["t100"] for row in parsed]
+    messages = [row["messages"] for row in parsed]
 
     fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10, 6), sharex=True)
 
     x = range(len(labels))
-    width = 0.25
-    ax1.bar([i - width for i in x], t50, width=width, label="T50 (s)")
-    ax1.bar(x, t90, width=width, label="T90 (s)")
-    ax1.bar([i + width for i in x], t100, width=width, label="T100 (s)")
+    ax1.plot(x, t50, marker="o", label="T50 (s)")
+    ax1.plot(x, t90, marker="o", label="T90 (s)")
+    ax1.plot(x, t100, marker="o", label="T100 (s)")
     ax1.set_ylabel("Propagation time (s)")
     ax1.legend()
-    ax1.set_title("Scenario Comparison")
+    ax1.set_title("Scenario Comparison (sorted by T90)")
 
-    ax2.plot(labels, messages, color="#ff7f0e", marker="o")
+    ax2.bar(x, messages, color="#ff7f0e")
     ax2.set_ylabel("Messages")
-    ax2.tick_params(axis="x", rotation=45, labelsize=8)
+    ax2.set_xticks(list(x), labels, rotation=45, fontsize=8)
 
     fig.tight_layout()
 

@@ -41,19 +41,26 @@ def main() -> None:
         raise SystemExit("No rows found in input CSV.")
 
     labels = [row["scenario"] for row in rows]
+    t50 = [float(row["t50_mean"]) for row in rows]
     t90 = [float(row["t90_mean"]) for row in rows]
+    t100 = [float(row["t100_mean"]) for row in rows]
     messages = [float(row["messages_mean"]) for row in rows]
 
-    fig, ax1 = plt.subplots(figsize=(9, 4))
-    ax1.bar(labels, t90, color="#1f77b4", alpha=0.7, label="T90 (s)")
-    ax1.set_ylabel("T90 (s)")
-    ax1.tick_params(axis="x", rotation=45, labelsize=8)
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10, 6), sharex=True)
 
-    ax2 = ax1.twinx()
-    ax2.plot(labels, messages, color="#ff7f0e", marker="o", label="Messages")
-    ax2.set_ylabel("Messages")
-
+    x = range(len(labels))
+    width = 0.25
+    ax1.bar([i - width for i in x], t50, width=width, label="T50 (s)")
+    ax1.bar(x, t90, width=width, label="T90 (s)")
+    ax1.bar([i + width for i in x], t100, width=width, label="T100 (s)")
+    ax1.set_ylabel("Propagation time (s)")
+    ax1.legend()
     ax1.set_title("Scenario Comparison")
+
+    ax2.plot(labels, messages, color="#ff7f0e", marker="o")
+    ax2.set_ylabel("Messages")
+    ax2.tick_params(axis="x", rotation=45, labelsize=8)
+
     fig.tight_layout()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

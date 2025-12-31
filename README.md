@@ -1,11 +1,13 @@
 # Block Propagation Simulation
 
-This project simulates the propagation of a 1 MB block through a peer-to-peer network under two dissemination strategies:
+This project models how a new block spreads through a decentralized P2P network. It connects a formal network model (graph topology, per-link latency and bandwidth) to simulated protocol behavior and measurable propagation metrics.
 
-1. **Naive flooding** – every node that receives the full block for the first time immediately forwards it to all neighbors.
-2. **Two-phase (announce/request/block)** – a lightweight announcement is broadcast first; nodes that still need the block request it, then receive the full payload.
-
-Both simulations explicitly model edge latency and transmission time based on bandwidth and block size. Results report how quickly different fractions of the network receive the block as well as message volumes per protocol.
+Current scope:
+- Network topologies: random regular, scale-free (Barabasi-Albert), small-world (Watts-Strogatz).
+- Protocols: naive flooding and a two-phase announce/request/block flow inspired by Bitcoin.
+- Link characteristics: per-edge latency and bandwidth distributions with a transmission-time term.
+- Forwarding churn: optional per-node drop probability (nodes receive but do not forward).
+- Metrics: T50/T90/T100 propagation times and message counts per protocol.
 
 ## Quick start
 
@@ -25,19 +27,33 @@ python simulation.py --protocol two-phase --runs 10 --seed 42
 
 Key options:
 
-- `--nodes` / `--degree` – configure the random regular topology (requires `nodes * degree` to be even).
-- `--latency-min` / `--latency-max` – latency bounds in seconds (uniform per edge).
-- `--bandwidth-mbps` – symmetric bandwidth on each edge in megabits per second.
-- `--block-bytes` – block size in bytes (default 1,000,000).
-- `--runs` – number of independent experiments to average over.
-- `--seed` – seed for reproducibility.
+- `--nodes` / `--degree` - node count and target degree (small-world requires even degree).
+- `--topology` - `random-regular`, `scale-free`, or `small-world`.
+- `--scale-free-m` - Barabasi-Albert attachment parameter (avg degree ~ 2*m).
+- `--rewire-prob` - Watts-Strogatz rewiring probability.
+- `--latency-dist` - `uniform` or `lognormal`.
+- `--latency-min` / `--latency-max` - latency bounds in seconds (uniform).
+- `--latency-mu` / `--latency-sigma` - lognormal parameters for latency.
+- `--bandwidth-dist` - `fixed`, `uniform`, or `lognormal`.
+- `--bandwidth-mbps` - fixed bandwidth in megabits per second.
+- `--bandwidth-min` / `--bandwidth-max` - uniform bandwidth bounds.
+- `--bandwidth-mu` / `--bandwidth-sigma` - lognormal parameters for bandwidth.
+- `--block-bytes` - block size in bytes (default 1,000,000).
+- `--drop-prob` - probability a node will not forward after receiving the block.
+- `--hist-bins` - if > 0, print histogram/CDF of arrival times.
+- `--runs` - number of independent experiments to average over.
+- `--seed` - seed for reproducibility.
 
 Each run prints T50/T90/T100 (times for 50%, 90%, and 100% of nodes to receive the full block) and message counts. When `--runs` > 1, aggregate min/mean/max values are shown.
 
 ## Project structure
 
-- `simulation.py` – core simulation logic for both protocols, graph generation, CLI entry point.
+- `simulation.py` - core simulation logic for both protocols, graph generation, CLI entry point.
 
 ## Requirements
 
-The code relies only on the Python standard library. Tested with Python 3.11.
+Tested with Python 3.11. Install dependencies with:
+
+```bash
+pip install -r requirements.txt
+```

@@ -41,6 +41,13 @@ Run a scenario sweep and export CSV summaries:
 python experiments/run_series.py --runs 5 --seed 42
 ```
 
+Run the full test matrix and plot results:
+
+```bash
+python experiments/run_all.py --runs 3 --seed 42
+python experiments/plot_results.py --input outputs/all_tests_summary.csv --output outputs/summary_plot.png
+```
+
 Animate propagation (interactive window or save to GIF):
 
 ```bash

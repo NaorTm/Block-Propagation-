@@ -83,21 +83,37 @@ def _adjust_bandwidth(
 
 
 def simulate_naive_flooding(
-    config: SimulationConfig, rng: random.Random, include_path_stats: bool = False
+    config: SimulationConfig,
+    rng: random.Random,
+    include_path_stats: bool = False,
+    network: tuple | None = None,
 ) -> RunResult:
-    (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
-    ) = build_network(config, rng)
+    if network is None:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = build_network(config, rng)
+    else:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = network
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
+    failure_times, delayed = _build_node_status(config, rng)
     failure_times, delayed = _build_node_status(config, rng)
 
     will_forward = [
@@ -201,17 +217,30 @@ def simulate_two_phase(
     rng: random.Random,
     include_path_stats: bool = False,
     compact_blocks: bool = False,
+    network: tuple | None = None,
 ) -> RunResult:
-    (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
-    ) = build_network(config, rng)
+    if network is None:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = build_network(config, rng)
+    else:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = network
 
     knows_block = [False] * config.num_nodes
     has_full_block = [False] * config.num_nodes
@@ -298,7 +327,8 @@ def simulate_two_phase(
                         bandwidth, config.compact_block_bytes
                     )
                     arrival = time + delivery_latency + compact_time
-                    missing_bytes = int((1.0 - overlap_ratio[dst]) * config.block_size_bytes)
+                    effective_overlap = overlap_ratio[dst] * config.compact_success_prob
+                    missing_bytes = int((1.0 - effective_overlap) * config.block_size_bytes)
                     if missing_bytes <= 0:
                         enqueue(arrival, "block_compact_ok", dst, src)
                     else:
@@ -345,8 +375,9 @@ def simulate_two_phase(
             )
             if _can_send(time, failure_times, dst):
                 enqueue(time + latency, "reconcile_req", dst, src)
+            effective_overlap = overlap_ratio[dst] * config.compact_success_prob
             missing_bytes = max(
-                int((1.0 - overlap_ratio[dst]) * config.block_size_bytes),
+                int((1.0 - effective_overlap) * config.block_size_bytes),
                 config.missing_tx_bytes_min,
             )
             missing_time = time + 2 * latency + config.transmission_time(
@@ -408,6 +439,7 @@ def simulate_push(
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
+    failure_times, delayed = _build_node_status(config, rng)
 
     will_forward = [
         True if node == config.source else rng.random() >= config.drop_prob

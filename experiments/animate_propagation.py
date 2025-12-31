@@ -38,11 +38,12 @@ def main() -> None:
     )
 
     # Build graph and run simulation for arrival times.
-    adjacency, _, _, _, _, _, _, _ = build_network(config, random.Random(args.seed))
+    network = build_network(config, random.Random(args.seed))
+    adjacency = network[0]
     if args.protocol == "naive":
-        result = simulate_naive_flooding(config, random.Random(args.seed))
+        result = simulate_naive_flooding(config, random.Random(args.seed), network=network)
     else:
-        result = simulate_two_phase(config, random.Random(args.seed))
+        result = simulate_two_phase(config, random.Random(args.seed), network=network)
 
     # Simple circular layout.
     import math

@@ -114,7 +114,6 @@ def simulate_naive_flooding(
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
     failure_times, delayed = _build_node_status(config, rng)
-    failure_times, delayed = _build_node_status(config, rng)
 
     will_forward = [
         True if node == config.source else rng.random() >= config.drop_prob
@@ -297,8 +296,9 @@ def simulate_two_phase(
                 back_latency = _adjust_latency(
                     _edge_latency(latency_map, src, dst), delayed, dst, config
                 )
-                if _can_send(time, failure_times, dst):
-                    enqueue(time + back_latency, "request", dst, src)
+                request_time = time + back_latency
+                if _can_send(request_time, failure_times, dst):
+                    enqueue(request_time, "request", dst, src)
 
         elif event_type == "request":
             if (
@@ -373,17 +373,19 @@ def simulate_two_phase(
             bandwidth = _adjust_bandwidth(
                 _edge_bandwidth(bandwidth_map, src, dst), delayed, src, config
             )
-            if _can_send(time, failure_times, dst):
-                enqueue(time + latency, "reconcile_req", dst, src)
+            reconcile_time = time + latency
+            if _can_send(reconcile_time, failure_times, dst):
+                enqueue(reconcile_time, "reconcile_req", dst, src)
             effective_overlap = overlap_ratio[dst] * config.compact_success_prob
             missing_bytes = max(
                 int((1.0 - effective_overlap) * config.block_size_bytes),
                 config.missing_tx_bytes_min,
             )
-            missing_time = time + 2 * latency + config.transmission_time(
+            missing_send_time = time + 2 * latency
+            missing_time = missing_send_time + config.transmission_time(
                 bandwidth, missing_bytes
             )
-            if _can_send(time, failure_times, src):
+            if _can_send(missing_send_time, failure_times, src):
                 enqueue(missing_time, "missing_tx", src, dst)
         else:
             raise ValueError(f"Unknown event type: {event_type}")

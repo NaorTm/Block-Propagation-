@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
 from src.config import SimulationConfig
+from src.metrics import macro_metrics
 from src.simulator import run_experiments
 
 
@@ -122,6 +123,16 @@ def main() -> None:
             scenario["protocol"], args.runs, scenario["config"], args.seed
         )
         summary = aggregate.summary
+        macro = [
+            macro_metrics(run.arrival_times, 600.0) for run in aggregate.runs
+        ]
+        macro_row = {
+            "compete_p_t90_mean": sum(m.competing_block_prob_t90 for m in macro) / len(macro),
+            "lambda_t100_mean": sum(m.expected_competing_blocks_t100 for m in macro) / len(macro),
+            "p_ge1_t100_mean": sum(m.prob_competing_blocks_ge1_t100 for m in macro) / len(macro),
+            "p_ge2_t100_mean": sum(m.prob_competing_blocks_ge2_t100 for m in macro) / len(macro),
+            "security_margin_t50_mean": sum(m.security_margin_t50 for m in macro) / len(macro),
+        }
         row = {
             "scenario": scenario["name"],
             "protocol": scenario["protocol"],
@@ -130,6 +141,7 @@ def main() -> None:
             "t100_mean": summary["t100"]["mean"],
             "messages_mean": summary["messages"]["mean"],
         }
+        row.update(macro_row)
         rows.append(row)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

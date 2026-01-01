@@ -48,6 +48,14 @@ python experiments/run_all.py --runs 3 --seed 42
 python experiments/plot_results.py --input outputs/all_tests_summary.csv --output outputs/summary_plot.png
 ```
 
+Launch the interactive dashboard (Plotly Dash):
+
+```bash
+python dashboard/app.py
+```
+
+Then open `http://127.0.0.1:8050/` in your browser.
+
 Animate propagation (interactive window or save to GIF):
 
 ```bash

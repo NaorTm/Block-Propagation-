@@ -424,18 +424,33 @@ def simulate_two_phase(
 
 
 def simulate_push(
-    config: SimulationConfig, rng: random.Random, include_path_stats: bool = False
+    config: SimulationConfig,
+    rng: random.Random,
+    include_path_stats: bool = False,
+    network: tuple | None = None,
 ) -> RunResult:
-    (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
-    ) = build_network(config, rng)
+    if network is None:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = build_network(config, rng)
+    else:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = network
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
@@ -541,18 +556,33 @@ def simulate_push(
 
 
 def simulate_pull(
-    config: SimulationConfig, rng: random.Random, include_path_stats: bool = False
+    config: SimulationConfig,
+    rng: random.Random,
+    include_path_stats: bool = False,
+    network: tuple | None = None,
 ) -> RunResult:
-    (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
-    ) = build_network(config, rng)
+    if network is None:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = build_network(config, rng)
+    else:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = network
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
@@ -666,18 +696,33 @@ def simulate_pull(
 
 
 def simulate_push_pull(
-    config: SimulationConfig, rng: random.Random, include_path_stats: bool = False
+    config: SimulationConfig,
+    rng: random.Random,
+    include_path_stats: bool = False,
+    network: tuple | None = None,
 ) -> RunResult:
-    (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
-    ) = build_network(config, rng)
+    if network is None:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = build_network(config, rng)
+    else:
+        (
+            adjacency,
+            latencies,
+            bandwidths,
+            bottleneck_nodes,
+            relay_nodes,
+            overlay,
+            overlay_latencies,
+            overlay_bandwidths,
+        ) = network
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0

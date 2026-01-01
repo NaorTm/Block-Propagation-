@@ -83,6 +83,20 @@ Nodes track:
 - has_full_block,
 - first_receive_time.
 
+### 7.3 Push, pull, push-pull variants (implemented)
+
+Push: on first receipt, a node pushes the full block to a fanout of neighbors.
+
+Pull: nodes periodically request the block from neighbors; a neighbor with the block responds with the full payload.
+
+Push-pull: combines periodic pull with a push on first receipt.
+
+### 7.4 Bitcoin optimizations (modeled)
+
+Compact blocks: full block payload is replaced with a smaller compact payload. Reconstruction uses an explicit transaction-overlap ratio; missing transactions are requested based on the overlap shortfall.
+
+Relay networks: a subset of nodes are designated as relay nodes; edges between relay nodes have lower latency and/or higher bandwidth, with an optional relay-only overlay layer.
+
 ## 8. Performance dependence
 
 We study:
@@ -97,7 +111,7 @@ We study:
 
 ### 9.1 Implementation choices
 
-Python with networkx, numpy, matplotlib or plotly.
+Python with networkx, numpy, matplotlib or plotly. An interactive Dash dashboard is provided under `dashboard/`.
 
 ### 9.2 Node behavior model
 
@@ -139,10 +153,12 @@ Maintain a priority queue of events (time, type, src, dst). Pop events, update s
 4. Two-stage protocol with same settings.
 5. Compare protocols and plot CDFs.
 6. Extended experiments: fanout, topology, churn/dropout, improved protocol.
+7. Aggregate macro metric summaries into the scenario CSV output (`outputs/all_tests_summary.csv`).
 
 ## 12. Optional real system integration
 
 Setup a Bitcoin/Ethereum node (testnet/regtest), collect propagation timestamps, and compare with simulation after parameter calibration.
+The log parser in `real_world/parse_logs.py` supports CSV inputs and Bitcoin Core debug.log lines.
 
 ## 13. Project architecture
 
@@ -153,7 +169,7 @@ Suggested modular components:
 - Metrics,
 - Visualization,
 - Real-world adapter.
-  - Placeholder scripts live under `real_world/` for future log ingestion.
+  - Log parsing scripts live under `real_world/` for CSV and Bitcoin Core debug.log inputs.
 
 ## 14. Deliverables
 
@@ -161,16 +177,8 @@ Suggested modular components:
 - Clean code repository with reproducible experiments,
 - Summary presentation,
 - Demo video or live visualization.
-### 7.3 Push, pull, push-pull variants (implemented)
 
-Push: on first receipt, a node pushes the full block to a fanout of neighbors.
-
-Pull: nodes periodically request the block from neighbors; a neighbor with the block responds with the full payload.
-
-Push-pull: combines periodic pull with a push on first receipt.
-
-### 7.4 Bitcoin optimizations (modeled)
-
-Compact blocks: full block payload is replaced with a smaller compact payload. Reconstruction uses an explicit transaction-overlap ratio; missing transactions are requested based on the overlap shortfall.
-
-Relay networks: a subset of nodes are designated as relay nodes; edges between relay nodes have lower latency and/or higher bandwidth, with an optional relay-only overlay layer.
+Artifacts in this repository:
+- `outputs/all_tests_summary.csv` with aggregated scenario metrics,
+- `outputs/summary_plot.png` for the comparison plot,
+- `outputs/prop.gif` when running the animation exporter.

@@ -2,6 +2,8 @@
 
 This document captures the combined project description, theoretical model, protocol formalization, simulation plan, and deliverables.
 
+Status: simulation and dashboard workflows are implemented; real-world integration is out of scope.
+
 ## 1. General description and objectives
 
 ### 1.1 Overall goal
@@ -10,7 +12,6 @@ Systematically examine how a new block propagates in a decentralized P2P network
 - The theoretical network model,
 - The protocol used or compared against,
 - A controlled simulation of propagation,
-- Real measurements or integration with an existing system (optional).
 
 ### 1.2 Specific focus: single 1 MB block study
 
@@ -155,12 +156,7 @@ Maintain a priority queue of events (time, type, src, dst). Pop events, update s
 6. Extended experiments: fanout, topology, churn/dropout, improved protocol.
 7. Aggregate macro metric summaries into the scenario CSV output (`outputs/all_tests_summary.csv`).
 
-## 12. Optional real system integration
-
-Setup a Bitcoin/Ethereum node (testnet/regtest), collect propagation timestamps, and compare with simulation after parameter calibration.
-The log parser in `real_world/parse_logs.py` supports CSV inputs and Bitcoin Core debug.log lines.
-
-## 13. Project architecture
+## 12. Project architecture
 
 Suggested modular components:
 - Network generator,
@@ -168,10 +164,9 @@ Suggested modular components:
 - Simulator (event queue),
 - Metrics,
 - Visualization,
-- Real-world adapter.
-  - Log parsing scripts live under `real_world/` for CSV and Bitcoin Core debug.log inputs.
+- Real-world adapter (removed from scope).
 
-## 14. Deliverables
+## 13. Deliverables
 
 - Final report (theory + simulation + results),
 - Clean code repository with reproducible experiments,

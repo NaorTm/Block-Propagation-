@@ -36,7 +36,8 @@ if (!once) {
     console.warn(
       `[sync-data] Unable to prepare source directory ${sourceDir}: ${error.message}`
     );
-    process.exit(0);
+    console.warn("[sync-data] Skipping watch; continuing without live sync.");
+    return;
   }
   let timer = null;
   try {

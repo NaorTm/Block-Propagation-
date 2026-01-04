@@ -327,6 +327,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.runs <= 0:
         parser.error("--runs must be a positive integer")
+    if args.block_interval <= 0:
+        parser.error("--block-interval must be positive")
     return args
 
 

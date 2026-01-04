@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import math
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Dict
@@ -126,11 +127,14 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             config = _apply_overrides(overrides)
             result = run_experiments(protocol, runs, config, seed)
+            def _clean(value: float) -> float | None:
+                return value if math.isfinite(value) else None
+
             summary = {
-                "t50": result.summary["t50"]["mean"],
-                "t90": result.summary["t90"]["mean"],
-                "t100": result.summary["t100"]["mean"],
-                "messages": result.summary["messages"]["mean"],
+                "t50": _clean(result.summary["t50"]["mean"]),
+                "t90": _clean(result.summary["t90"]["mean"]),
+                "t100": _clean(result.summary["t100"]["mean"]),
+                "messages": _clean(result.summary["messages"]["mean"]),
             }
             self._send_json({"summary": summary})
         except Exception as exc:

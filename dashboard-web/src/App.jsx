@@ -341,7 +341,6 @@ function App() {
   const [compareTarget, setCompareTarget] = useState("");
   const [compareMode, setCompareMode] = useState("absolute");
   const [playScenario, setPlayScenario] = useState("");
-  const [playProtocol, setPlayProtocol] = useState("");
   const [playBlockSize, setPlayBlockSize] = useState(BASE_BLOCK_SIZE);
   const [playBandwidth, setPlayBandwidth] = useState(BASE_BANDWIDTH);
   const [playLatency, setPlayLatency] = useState(BASE_LATENCY);
@@ -438,10 +437,7 @@ function App() {
     if (!playScenario) {
       setPlayScenario(rows[0].scenario);
     }
-    if (!playProtocol) {
-      setPlayProtocol(rows[0].protocol);
-    }
-  }, [rows, playScenario, playProtocol]);
+  }, [rows, playScenario]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -594,19 +590,18 @@ function App() {
   };
 
   const playgroundBase = useMemo(() => {
-    return rows.find(
-      (row) => row.scenario === playScenario && row.protocol === playProtocol
-    );
-  }, [rows, playScenario, playProtocol]);
+    return rows.find((row) => row.scenario === playScenario);
+  }, [rows, playScenario]);
 
   const playgroundApprox = useMemo(() => {
     if (!playgroundBase) return null;
+    const protocol = playgroundBase.protocol;
     const latencyFactor = playLatency / BASE_LATENCY;
     const bandwidthFactor = BASE_BANDWIDTH / playBandwidth;
     const sizeFactor = playBlockSize / BASE_BLOCK_SIZE;
     const disruptionFactor = 1 + playDisruption * 2;
     const compactFactor =
-      playProtocol === "bitcoin-compact" ? 1 - playOverlap * 0.2 : 1;
+      protocol === "bitcoin-compact" ? 1 - playOverlap * 0.2 : 1;
     const timeFactor =
       (0.5 * latencyFactor + 0.3 * bandwidthFactor + 0.2 * sizeFactor) *
       disruptionFactor *
@@ -625,7 +620,6 @@ function App() {
     playBlockSize,
     playDisruption,
     playOverlap,
-    playProtocol,
   ]);
 
   const runLiveSim = async () => {
@@ -636,7 +630,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          protocol: playProtocol,
+          protocol: playgroundBase?.protocol ?? "two-phase",
           scenario: playScenario,
           runs: 3,
           seed: 42,
@@ -662,6 +656,16 @@ function App() {
     } finally {
       setLiveLoading(false);
     }
+  };
+
+  const resetPlayground = () => {
+    setPlayBlockSize(BASE_BLOCK_SIZE);
+    setPlayBandwidth(BASE_BANDWIDTH);
+    setPlayLatency(BASE_LATENCY);
+    setPlayOverlap(0.9);
+    setPlayDisruption(0);
+    setLiveResult(null);
+    setLiveError("");
   };
 
   const toggleProtocol = (protocol) => {
@@ -869,19 +873,6 @@ function App() {
                 </select>
               </label>
               <label>
-                Protocol
-                <select
-                  value={playProtocol}
-                  onChange={(event) => setPlayProtocol(event.target.value)}
-                >
-                  {protocols.map((value) => (
-                    <option key={value} value={value}>
-                      {humanize(value)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
                 Block size (MB)
                 <input
                   type="range"
@@ -978,6 +969,13 @@ function App() {
                   disabled={liveLoading}
                 >
                   {liveLoading ? "Running..." : "Run exact simulation"}
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={resetPlayground}
+                >
+                  Reset playground
                 </button>
                 <p className="hint">Server: python dashboard-web/sim_server.py</p>
               </div>

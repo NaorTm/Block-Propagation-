@@ -123,6 +123,17 @@ const makeSteps = (variants) => variants.map((step, index) => ({
   badge: step.badge,
 }));
 
+const shuffleWithSeed = (items, seed) => {
+  const result = [...items];
+  let state = seed || 1;
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    const j = Math.floor((state / 4294967296) * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
 const demoPresets = {
   protocol: {
     "naive": {
@@ -300,6 +311,8 @@ function App() {
   const [compareBase, setCompareBase] = useState("");
   const [compareTarget, setCompareTarget] = useState("");
   const [compareMode, setCompareMode] = useState("absolute");
+  const [chartOrder, setChartOrder] = useState("sorted");
+  const [randomSeed, setRandomSeed] = useState(1);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -391,12 +404,24 @@ function App() {
   }, [rows, scenario, selectedProtocols, search]);
 
   const chartRows = useMemo(
-    () =>
-      filtered.map((row) => ({
+    () => {
+      const rows = filtered.map((row) => ({
         ...row,
         label: `${humanize(row.scenario)} - ${humanize(row.protocol)}`,
-      })),
-    [filtered]
+      }));
+      if (chartOrder === "random") {
+        return shuffleWithSeed(rows, randomSeed);
+      }
+      if (chartOrder === "sorted") {
+        return [...rows].sort((a, b) => {
+          if (a.t90_mean === null) return 1;
+          if (b.t90_mean === null) return -1;
+          return a.t90_mean - b.t90_mean;
+        });
+      }
+      return rows;
+    },
+    [filtered, chartOrder, randomSeed]
   );
   const summary = useMemo(() => {
     if (!filtered.length) {
@@ -500,6 +525,18 @@ function App() {
     const sign = value > 0 ? "+" : "";
     const suffix = mode === "percent" ? "%" : "";
     return `${sign}${value.toFixed(digits)}${suffix}`;
+  };
+
+  const renderScatterTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0].payload;
+    return (
+      <div className="tooltip-card">
+        <strong>{humanize(data.scenario)} - {humanize(data.protocol)}</strong>
+        <div>T90: {formatNumber(data.t90_mean, 3)}s</div>
+        <div>Messages: {formatNumber(data.messages_mean, 0)}</div>
+      </div>
+    );
   };
 
   const toggleProtocol = (protocol) => {
@@ -761,6 +798,25 @@ function App() {
           </section>
 
           <section className="charts">
+            <div className="charts-controls">
+              <label>
+                Chart order
+                <select
+                  value={chartOrder}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setChartOrder(value);
+                    if (value === "random") {
+                      setRandomSeed((prev) => prev + 1);
+                    }
+                  }}
+                >
+                  <option value="sorted">Sorted by T90</option>
+                  <option value="random">Random</option>
+                  <option value="original">Original order</option>
+                </select>
+              </label>
+            </div>
             <div className="panel">
               <div className="panel-header">
                 <h3>Latency Curve</h3>
@@ -822,7 +878,7 @@ function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
                   <XAxis dataKey="messages_mean" type="number" name="Messages" />
                   <YAxis dataKey="t90_mean" type="number" name="T90 (s)" />
-                  <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                  <Tooltip cursor={{ strokeDasharray: "3 3" }} content={renderScatterTooltip} />
                   <Scatter data={chartRows} fill="var(--accent-2)" />
                 </ScatterChart>
               </ResponsiveContainer>

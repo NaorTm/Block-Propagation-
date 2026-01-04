@@ -533,6 +533,37 @@
   padding: 0.6rem 0.8rem;
 }
 
+.charts-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.charts-controls label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.charts-controls select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+}
+
+.tooltip-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
 .table {
   display: grid;
   gap: 0.4rem;

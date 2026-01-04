@@ -56,6 +56,18 @@ python dashboard/app.py
 
 Then open `http://127.0.0.1:8050/` in your browser.
 
+Launch the new web dashboard (React/Vite):
+
+```bash
+cd dashboard-web
+npm install
+npm run dev
+```
+
+Then open the URL shown in the terminal (usually `http://localhost:5173/`).
+The dev command watches `outputs/all_tests_summary.csv` and mirrors it into
+`dashboard-web/public/data/all_tests_summary.csv` for live updates.
+
 Animate propagation (interactive window or save to GIF):
 
 ```bash
@@ -115,6 +127,7 @@ python experiments/animate_propagation.py --protocol two-phase --nodes 100 --deg
 - `src/metrics.py` - thresholds, histogram/CDF, path stats.
 - `src/simulator.py` - experiment runner and formatting.
 - `experiments/run_base.py` - baseline run + CDF plot.
+- `dashboard-web/` - React dashboard (Vite), loads CSV from `outputs/`.
 - `real_world/` - placeholders for real-world log parsing.
 - `real_world/parse_logs.py` - parse CSV logs into arrival time summaries.
 - `real_world/parse_logs.py --format bitcoin-core` - parse Bitcoin Core debug.log lines.

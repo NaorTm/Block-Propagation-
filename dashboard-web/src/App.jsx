@@ -115,13 +115,31 @@ const graphEdges = [
 ];
 
 const findNode = (id) => graphNodes.find((node) => node.id === id);
+const allNodeIds = graphNodes.map((node) => node.id);
 
 const makeSteps = (variants) => variants.map((step, index) => ({
-  t: step.t ?? index * 1.2,
+  t: step.t ?? index * 1.6,
   nodes: step.nodes,
   caption: step.caption,
   badge: step.badge,
 }));
+
+const ensureFullCoverage = (steps) => {
+  if (!steps.length) return steps;
+  const last = steps[steps.length - 1];
+  const lastNodes = new Set(last.nodes || []);
+  const missing = allNodeIds.some((id) => !lastNodes.has(id));
+  if (!missing) return steps;
+  const finalTime = last.t + 1.4;
+  return [
+    ...steps,
+    {
+      t: finalTime,
+      nodes: allNodeIds,
+      caption: "Full propagation completes.",
+    },
+  ];
+};
 
 const shuffleWithSeed = (items, seed) => {
   const result = [...items];
@@ -280,14 +298,21 @@ const demoPresets = {
 };
 
 const buildDemo = (kind, key) => {
-  if (kind === "protocol") return demoPresets.protocol[key];
+  if (kind === "protocol") {
+    const demo = demoPresets.protocol[key];
+    if (!demo) return null;
+    return {
+      ...demo,
+      steps: ensureFullCoverage(demo.steps),
+    };
+  }
   const scenario = demoPresets.scenario[key];
   if (!scenario) return null;
   const base = demoPresets.protocol[scenario.inherits];
   return {
     title: scenario.title,
     summary: scenario.summary,
-    steps: scenario.steps ?? base.steps,
+    steps: ensureFullCoverage(scenario.steps ?? base.steps),
   };
 };
 
@@ -307,7 +332,7 @@ function App() {
   const [demoKind, setDemoKind] = useState(null);
   const [demoPlaying, setDemoPlaying] = useState(true);
   const [demoTime, setDemoTime] = useState(0);
-  const [demoSpeed, setDemoSpeed] = useState(1);
+  const [demoSpeed, setDemoSpeed] = useState(0.8);
   const [compareBase, setCompareBase] = useState("");
   const [compareTarget, setCompareTarget] = useState("");
   const [compareMode, setCompareMode] = useState("absolute");
@@ -1041,6 +1066,7 @@ function App() {
                   onChange={(event) => setDemoSpeed(Number(event.target.value))}
                 >
                   <option value={0.5}>0.5x</option>
+                  <option value={0.8}>0.8x</option>
                   <option value={1}>1x</option>
                   <option value={1.5}>1.5x</option>
                   <option value={2}>2x</option>

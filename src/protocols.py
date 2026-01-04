@@ -327,9 +327,8 @@ def simulate_two_phase(
                         bandwidth, config.compact_block_bytes
                     )
                     arrival = time + delivery_latency + compact_time
-                    effective_overlap = overlap_ratio[dst] * config.compact_success_prob
-                    missing_bytes = int((1.0 - effective_overlap) * config.block_size_bytes)
-                    if missing_bytes <= 0:
+                    success_prob = overlap_ratio[dst] * config.compact_success_prob
+                    if rng.random() < success_prob:
                         enqueue(arrival, "block_compact_ok", dst, src)
                     else:
                         enqueue(arrival, "block_compact_fail", dst, src)
@@ -376,7 +375,7 @@ def simulate_two_phase(
             reconcile_time = time + latency
             if _can_send(reconcile_time, failure_times, dst):
                 enqueue(reconcile_time, "reconcile_req", dst, src)
-            effective_overlap = overlap_ratio[dst] * config.compact_success_prob
+            effective_overlap = overlap_ratio[dst]
             missing_bytes = max(
                 int((1.0 - effective_overlap) * config.block_size_bytes),
                 config.missing_tx_bytes_min,

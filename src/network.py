@@ -66,7 +66,9 @@ def select_bottleneck_nodes(
 ) -> set[int]:
     if fraction <= 0:
         return set()
-    count = max(1, int(round(num_nodes * fraction)))
+    count = int(round(num_nodes * fraction))
+    if count <= 0:
+        return set()
     count = min(count, num_nodes)
     return set(rng.sample(range(num_nodes), count))
 
@@ -74,7 +76,9 @@ def select_bottleneck_nodes(
 def select_relay_nodes(num_nodes: int, fraction: float, rng: random.Random) -> set[int]:
     if fraction <= 0:
         return set()
-    count = max(1, int(round(num_nodes * fraction)))
+    count = int(round(num_nodes * fraction))
+    if count <= 0:
+        return set()
     count = min(count, num_nodes)
     return set(rng.sample(range(num_nodes), count))
 

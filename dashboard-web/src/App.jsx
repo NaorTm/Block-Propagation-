@@ -29,7 +29,6 @@ const numberFields = [
   "lambda_t100_mean",
   "p_ge1_t100_mean",
   "p_ge2_t100_mean",
-  "security_margin_t50_mean",
 ];
 
 const parseCsv = (text) =>
@@ -83,7 +82,7 @@ const scenarioInfo = {
   "compact_blocks": "Compact block protocol with mempool overlap assumptions.",
   "bottlenecks": "Two-phase protocol with injected slow nodes (latency/bandwidth bottlenecks).",
   "churn_delay": "Push-pull protocol under churn and additional latency/bandwidth delays.",
-  "macro_metrics": "Baseline two-phase run used to compute macro security metrics.",
+  "macro_metrics": "Baseline two-phase run used to compute macro metrics.",
 };
 
 const graphNodes = [
@@ -468,7 +467,6 @@ function App() {
     { key: "t90_mean", label: "T90", digits: 3 },
     { key: "t100_mean", label: "T100", digits: 3 },
     { key: "messages_mean", label: "Messages", digits: 0 },
-    { key: "security_margin_t50_mean", label: "Security", digits: 3 },
   ];
 
   const comparison = useMemo(() => {
@@ -829,33 +827,6 @@ function App() {
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
-            <div className="panel">
-              <div className="panel-header">
-                <h3>Security Margin</h3>
-                <p>Propagation safety buffer by protocol</p>
-              </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={chartRows}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
-                  <XAxis
-                    dataKey="label"
-                    interval={0}
-                    angle={-20}
-                    textAnchor="end"
-                    height={60}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <YAxis />
-                  <Tooltip formatter={(value) => formatNumber(value, 3)} />
-                  <Area
-                    type="monotone"
-                    dataKey="security_margin_t50_mean"
-                    stroke="var(--accent-3)"
-                    fill="var(--accent-3-soft)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
           </section>
 
           <section className="table-wrap">
@@ -871,7 +842,6 @@ function App() {
                   <option value="t50_mean">T50</option>
                   <option value="t90_mean">T90</option>
                   <option value="t100_mean">T100</option>
-                  <option value="security_margin_t50_mean">Security</option>
                 </select>
               </label>
               <label>
@@ -890,19 +860,17 @@ function App() {
                 <span>T90</span>
                 <span>T100</span>
                 <span>Messages</span>
-                <span>Security</span>
+            </div>
+            {sortedRows.map((row) => (
+              <div key={`${row.scenario}-${row.protocol}`} className="table-row">
+                <span>{humanize(row.scenario)}</span>
+                <span>{humanize(row.protocol)}</span>
+                <span>{formatNumber(row.t50_mean, 3)}s</span>
+                <span>{formatNumber(row.t90_mean, 3)}s</span>
+                <span>{formatNumber(row.t100_mean, 3)}s</span>
+                <span>{formatNumber(row.messages_mean, 0)}</span>
               </div>
-              {sortedRows.map((row) => (
-                <div key={`${row.scenario}-${row.protocol}`} className="table-row">
-                  <span>{humanize(row.scenario)}</span>
-                  <span>{humanize(row.protocol)}</span>
-                  <span>{formatNumber(row.t50_mean, 3)}s</span>
-                  <span>{formatNumber(row.t90_mean, 3)}s</span>
-                  <span>{formatNumber(row.t100_mean, 3)}s</span>
-                  <span>{formatNumber(row.messages_mean, 0)}</span>
-                  <span>{formatNumber(row.security_margin_t50_mean, 3)}</span>
-                </div>
-              ))}
+            ))}
             </div>
           </section>
         </div>

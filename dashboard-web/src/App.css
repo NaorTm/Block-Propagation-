@@ -470,6 +470,69 @@
   border-radius: 12px;
 }
 
+.comparison-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.comparison-controls label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.comparison-controls select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+}
+
+.comparison-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+}
+
+.comparison-metrics {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.comparison-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.comparison-row span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.comparison-row strong {
+  font-size: 1.1rem;
+}
+
+.comparison-row small {
+  color: var(--muted);
+}
+
+.comparison-chart {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.6rem 0.8rem;
+}
+
 .table {
   display: grid;
   gap: 0.4rem;

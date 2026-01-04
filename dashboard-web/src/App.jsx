@@ -56,7 +56,7 @@ const parseCsv = (text) =>
   });
 
 const formatNumber = (value, digits = 3) => {
-  if (value === null || Number.isNaN(value)) return "—";
+  if (value === null || Number.isNaN(value)) return "--";
   return Number(value).toFixed(digits);
 };
 
@@ -298,6 +298,9 @@ function App() {
   const [demoPlaying, setDemoPlaying] = useState(true);
   const [demoTime, setDemoTime] = useState(0);
   const [demoSpeed, setDemoSpeed] = useState(1);
+  const [compareBase, setCompareBase] = useState("");
+  const [compareTarget, setCompareTarget] = useState("");
+  const [compareMode, setCompareMode] = useState("absolute");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -392,7 +395,7 @@ function App() {
     () =>
       filtered.map((row) => ({
         ...row,
-        label: `${humanize(row.scenario)} · ${humanize(row.protocol)}`,
+        label: `${humanize(row.scenario)} - ${humanize(row.protocol)}`,
       })),
     [filtered]
   );
@@ -438,6 +441,69 @@ function App() {
     });
   }, [filtered, sortKey, sortDir]);
 
+  const comparisonOptions = useMemo(
+    () =>
+      filtered.map((row) => ({
+        key: `${row.scenario}||${row.protocol}`,
+        label: `${humanize(row.scenario)} - ${humanize(row.protocol)}`,
+        row,
+      })),
+    [filtered]
+  );
+
+  useEffect(() => {
+    if (!comparisonOptions.length) return;
+    if (!comparisonOptions.some((opt) => opt.key === compareBase)) {
+      setCompareBase(comparisonOptions[0].key);
+    }
+    if (!comparisonOptions.some((opt) => opt.key === compareTarget)) {
+      const fallback =
+        comparisonOptions.length > 1 ? comparisonOptions[1].key : comparisonOptions[0].key;
+      setCompareTarget(fallback);
+    }
+  }, [comparisonOptions, compareBase, compareTarget]);
+
+  const compareMetrics = [
+    { key: "t50_mean", label: "T50", digits: 3 },
+    { key: "t90_mean", label: "T90", digits: 3 },
+    { key: "t100_mean", label: "T100", digits: 3 },
+    { key: "messages_mean", label: "Messages", digits: 0 },
+    { key: "security_margin_t50_mean", label: "Security", digits: 3 },
+  ];
+
+  const comparison = useMemo(() => {
+    const base = comparisonOptions.find((opt) => opt.key === compareBase)?.row;
+    const target = comparisonOptions.find((opt) => opt.key === compareTarget)?.row;
+    if (!base || !target) return null;
+    const rows = compareMetrics.map((metric) => {
+      const baseVal = base[metric.key];
+      const targetVal = target[metric.key];
+      let delta = null;
+      if (baseVal !== null && targetVal !== null) {
+        if (compareMode === "percent") {
+          delta = baseVal === 0 ? null : ((targetVal - baseVal) / baseVal) * 100;
+        } else {
+          delta = targetVal - baseVal;
+        }
+      }
+      return {
+        metric: metric.label,
+        delta,
+        baseVal,
+        targetVal,
+        digits: metric.digits,
+      };
+    });
+    return { base, target, rows };
+  }, [compareBase, compareTarget, compareMode, comparisonOptions]);
+
+  const formatDelta = (value, digits, mode) => {
+    if (value === null || Number.isNaN(value)) return "--";
+    const sign = value > 0 ? "+" : "";
+    const suffix = mode === "percent" ? "%" : "";
+    return `${sign}${value.toFixed(digits)}${suffix}`;
+  };
+
   const toggleProtocol = (protocol) => {
     setSelectedProtocols((prev) =>
       prev.includes(protocol)
@@ -477,7 +543,7 @@ function App() {
     <div className="app">
       <header className="hero">
         <div>
-          <p className="eyebrow">Block Propagation • Visual Lab</p>
+          <p className="eyebrow">Block Propagation - Visual Lab</p>
           <h1>Propagation Pulse</h1>
           <p className="subtitle">
             A vivid live dashboard for propagation behavior, compact blocks, and
@@ -576,28 +642,28 @@ function App() {
           <span>Fastest T90</span>
           <strong>
             {summary.bestT90
-              ? `${humanize(summary.bestT90.protocol)} • ${formatNumber(
+              ? `${humanize(summary.bestT90.protocol)} - ${formatNumber(
                   summary.bestT90.t90_mean,
                   2
                 )}s`
-              : "—"}
+              : "--"}
           </strong>
         </div>
         <div className="stat-card">
           <span>Lowest Messages</span>
           <strong>
             {summary.lowestMessages
-              ? `${humanize(summary.lowestMessages.protocol)} • ${formatNumber(
+              ? `${humanize(summary.lowestMessages.protocol)} - ${formatNumber(
                   summary.lowestMessages.messages_mean,
                   0
                 )}`
-              : "—"}
+              : "--"}
           </strong>
         </div>
       </section>
 
       {error && <div className="banner error">{error}</div>}
-      {loading && <div className="banner">Loading data…</div>}
+      {loading && <div className="banner">Loading data...</div>}
 
       <section className="layout">
         <aside className="side-panel left">
@@ -623,6 +689,79 @@ function App() {
         </aside>
 
         <div className="main-content">
+          <section className="comparison panel">
+            <div className="panel-header">
+              <h3>Comparisons</h3>
+              <p>Compare two scenarios or protocols side by side</p>
+            </div>
+            <div className="comparison-controls">
+              <label>
+                Baseline
+                <select value={compareBase} onChange={(event) => setCompareBase(event.target.value)}>
+                  {comparisonOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Compare to
+                <select
+                  value={compareTarget}
+                  onChange={(event) => setCompareTarget(event.target.value)}
+                >
+                  {comparisonOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Mode
+                <select value={compareMode} onChange={(event) => setCompareMode(event.target.value)}>
+                  <option value="absolute">Absolute delta</option>
+                  <option value="percent">Percent change</option>
+                </select>
+              </label>
+            </div>
+            {comparison ? (
+              <div className="comparison-grid">
+                <div className="comparison-metrics">
+                  {comparison.rows.map((row) => (
+                    <div key={row.metric} className="comparison-row">
+                      <span>{row.metric}</span>
+                      <strong>
+                        {formatDelta(row.delta, row.digits, compareMode)}
+                      </strong>
+                      <small>
+                        {formatNumber(row.baseVal, row.digits)} -> {formatNumber(row.targetVal, row.digits)}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+                <div className="comparison-chart">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={comparison.rows}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+                      <XAxis dataKey="metric" />
+                      <YAxis />
+                      <Tooltip
+                        formatter={(value, name, props) =>
+                          formatDelta(value, props.payload.digits, compareMode)
+                        }
+                      />
+                      <Bar dataKey="delta" fill="var(--accent-2)" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="banner">Select two items to compare.</div>
+            )}
+          </section>
+
           <section className="charts">
             <div className="panel">
               <div className="panel-header">

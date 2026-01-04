@@ -26,6 +26,9 @@ from .results import AggregateResult, RunResult
 
 
 def summarize_runs(protocol: str, runs: List[RunResult]) -> AggregateResult:
+    if not runs:
+        raise ValueError("At least one run result is required to summarize metrics.")
+
     def metric_values(selector) -> List[float]:
         return [selector(run) for run in runs]
 
@@ -53,6 +56,9 @@ def run_experiments(
     seed: int | None,
     include_path_stats: bool = False,
 ) -> AggregateResult:
+    if runs <= 0:
+        raise ValueError("Number of runs must be positive.")
+
     rng = random.Random(seed)
     results: List[RunResult] = []
 

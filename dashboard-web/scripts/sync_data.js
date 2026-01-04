@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 
 const root = path.resolve(__dirname, "..");
 const source = path.resolve(root, "..", "outputs", "all_tests_summary.csv");
+const sourceDir = path.dirname(source);
 const targetDir = path.resolve(root, "public", "data");
 const target = path.resolve(targetDir, "all_tests_summary.csv");
 const once = process.argv.includes("--once");
@@ -29,14 +30,28 @@ const copyFile = () => {
 copyFile();
 
 if (!once) {
+  try {
+    fs.mkdirSync(sourceDir, { recursive: true });
+  } catch (error) {
+    console.warn(
+      `[sync-data] Unable to prepare source directory ${sourceDir}: ${error.message}`
+    );
+    process.exit(0);
+  }
   let timer = null;
-  fs.watch(path.dirname(source), (eventType, filename) => {
-    if (!filename || filename !== path.basename(source)) {
-      return;
-    }
-    if (timer) {
-      clearTimeout(timer);
-    }
-    timer = setTimeout(copyFile, 100);
-  });
+  try {
+    fs.watch(sourceDir, (eventType, filename) => {
+      if (!filename || filename !== path.basename(source)) {
+        return;
+      }
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(copyFile, 100);
+    });
+  } catch (error) {
+    console.warn(
+      `[sync-data] Unable to watch source directory ${sourceDir}: ${error.message}`
+    );
+  }
 }

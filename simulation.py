@@ -324,7 +324,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--source", type=int, default=0)
     parser.add_argument("--seed", type=int, default=None, help="Random seed")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.runs <= 0:
+        parser.error("--runs must be a positive integer")
+    if args.block_interval <= 0:
+        parser.error("--block-interval must be positive")
+    return args
 
 
 def main() -> None:

@@ -68,6 +68,20 @@ Then open the URL shown in the terminal (usually `http://localhost:5173/`).
 The dev command watches `outputs/all_tests_summary.csv` and mirrors it into
 `dashboard-web/public/data/all_tests_summary.csv` for live updates.
 
+Optional: run the live simulation server used by the Playground controls:
+
+```bash
+cd dashboard-web
+python sim_server.py
+```
+
+Or:
+
+```bash
+cd dashboard-web
+npm run sim
+```
+
 Animate propagation (interactive window or save to GIF):
 
 ```bash

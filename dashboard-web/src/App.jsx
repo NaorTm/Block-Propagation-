@@ -19,7 +19,11 @@ import {
 import "./App.css";
 
 const DATA_URL = "/data/all_tests_summary.csv";
+const SIM_URL = "http://localhost:8000/simulate";
 const POLL_MS = 300000;
+const BASE_BLOCK_SIZE = 1_000_000;
+const BASE_BANDWIDTH = 10;
+const BASE_LATENCY = 0.125;
 const numberFields = [
   "t50_mean",
   "t90_mean",
@@ -336,6 +340,16 @@ function App() {
   const [compareBase, setCompareBase] = useState("");
   const [compareTarget, setCompareTarget] = useState("");
   const [compareMode, setCompareMode] = useState("absolute");
+  const [playScenario, setPlayScenario] = useState("");
+  const [playProtocol, setPlayProtocol] = useState("");
+  const [playBlockSize, setPlayBlockSize] = useState(BASE_BLOCK_SIZE);
+  const [playBandwidth, setPlayBandwidth] = useState(BASE_BANDWIDTH);
+  const [playLatency, setPlayLatency] = useState(BASE_LATENCY);
+  const [playOverlap, setPlayOverlap] = useState(0.9);
+  const [playDisruption, setPlayDisruption] = useState(0);
+  const [liveResult, setLiveResult] = useState(null);
+  const [liveError, setLiveError] = useState("");
+  const [liveLoading, setLiveLoading] = useState(false);
   const [chartOrder, setChartOrder] = useState("sorted");
   const [randomSeed, setRandomSeed] = useState(1);
 
@@ -403,6 +417,11 @@ function App() {
     return ["all", ...all];
   }, [rows]);
 
+  const scenarioOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.scenario))).sort(),
+    [rows]
+  );
+
   const protocols = useMemo(
     () => Array.from(new Set(rows.map((row) => row.protocol))).sort(),
     [rows]
@@ -413,6 +432,16 @@ function App() {
       setSelectedProtocols(protocols);
     }
   }, [protocols, selectedProtocols.length]);
+
+  useEffect(() => {
+    if (!rows.length) return;
+    if (!playScenario) {
+      setPlayScenario(rows[0].scenario);
+    }
+    if (!playProtocol) {
+      setPlayProtocol(rows[0].protocol);
+    }
+  }, [rows, playScenario, playProtocol]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -562,6 +591,77 @@ function App() {
         <div>Messages: {formatNumber(data.messages_mean, 0)}</div>
       </div>
     );
+  };
+
+  const playgroundBase = useMemo(() => {
+    return rows.find(
+      (row) => row.scenario === playScenario && row.protocol === playProtocol
+    );
+  }, [rows, playScenario, playProtocol]);
+
+  const playgroundApprox = useMemo(() => {
+    if (!playgroundBase) return null;
+    const latencyFactor = playLatency / BASE_LATENCY;
+    const bandwidthFactor = BASE_BANDWIDTH / playBandwidth;
+    const sizeFactor = playBlockSize / BASE_BLOCK_SIZE;
+    const disruptionFactor = 1 + playDisruption * 2;
+    const compactFactor =
+      playProtocol === "bitcoin-compact" ? 1 - playOverlap * 0.2 : 1;
+    const timeFactor =
+      (0.5 * latencyFactor + 0.3 * bandwidthFactor + 0.2 * sizeFactor) *
+      disruptionFactor *
+      compactFactor;
+    const messageFactor = 1 + playDisruption * 0.6;
+    return {
+      t50: playgroundBase.t50_mean * timeFactor,
+      t90: playgroundBase.t90_mean * timeFactor,
+      t100: playgroundBase.t100_mean * timeFactor,
+      messages: playgroundBase.messages_mean * messageFactor,
+    };
+  }, [
+    playgroundBase,
+    playLatency,
+    playBandwidth,
+    playBlockSize,
+    playDisruption,
+    playOverlap,
+    playProtocol,
+  ]);
+
+  const runLiveSim = async () => {
+    setLiveLoading(true);
+    setLiveError("");
+    try {
+      const response = await fetch(SIM_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          protocol: playProtocol,
+          scenario: playScenario,
+          runs: 3,
+          seed: 42,
+          block_size_bytes: Math.round(playBlockSize),
+          bandwidth_mbps: playBandwidth,
+          latency_min: playLatency,
+          latency_max: playLatency,
+          mempool_overlap_mean: playOverlap,
+          mempool_overlap_std: 0.05,
+          churn_prob: playDisruption,
+          delay_prob: playDisruption,
+          delay_latency_mult: 2.0,
+          delay_bandwidth_mult: 0.7,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      const payload = await response.json();
+      setLiveResult(payload.summary);
+    } catch (err) {
+      setLiveError(err.message || "Failed to run simulation.");
+    } finally {
+      setLiveLoading(false);
+    }
   };
 
   const toggleProtocol = (protocol) => {
@@ -749,6 +849,141 @@ function App() {
         </aside>
 
         <div className="main-content">
+          <section className="playground panel">
+            <div className="panel-header">
+              <h3>Playground</h3>
+              <p>Adjust one scenario and compare approximate vs live results</p>
+            </div>
+            <div className="playground-controls">
+              <label>
+                Scenario
+                <select
+                  value={playScenario}
+                  onChange={(event) => setPlayScenario(event.target.value)}
+                >
+                  {scenarioOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {humanize(value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Protocol
+                <select
+                  value={playProtocol}
+                  onChange={(event) => setPlayProtocol(event.target.value)}
+                >
+                  {protocols.map((value) => (
+                    <option key={value} value={value}>
+                      {humanize(value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Block size (MB)
+                <input
+                  type="range"
+                  min="0.5"
+                  max="4"
+                  step="0.1"
+                  value={(playBlockSize / 1_000_000).toFixed(1)}
+                  onChange={(event) =>
+                    setPlayBlockSize(Number(event.target.value) * 1_000_000)
+                  }
+                />
+                <span>{(playBlockSize / 1_000_000).toFixed(1)} MB</span>
+              </label>
+              <label>
+                Bandwidth (Mbps)
+                <input
+                  type="range"
+                  min="2"
+                  max="50"
+                  step="1"
+                  value={playBandwidth}
+                  onChange={(event) => setPlayBandwidth(Number(event.target.value))}
+                />
+                <span>{playBandwidth} Mbps</span>
+              </label>
+              <label>
+                Latency (s)
+                <input
+                  type="range"
+                  min="0.02"
+                  max="0.4"
+                  step="0.01"
+                  value={playLatency.toFixed(2)}
+                  onChange={(event) => setPlayLatency(Number(event.target.value))}
+                />
+                <span>{playLatency.toFixed(2)} s</span>
+              </label>
+              <label>
+                Mempool overlap
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1"
+                  step="0.02"
+                  value={playOverlap.toFixed(2)}
+                  onChange={(event) => setPlayOverlap(Number(event.target.value))}
+                />
+                <span>{playOverlap.toFixed(2)}</span>
+              </label>
+              <label>
+                Churn / delay
+                <input
+                  type="range"
+                  min="0"
+                  max="0.3"
+                  step="0.02"
+                  value={playDisruption.toFixed(2)}
+                  onChange={(event) => setPlayDisruption(Number(event.target.value))}
+                />
+                <span>{playDisruption.toFixed(2)}</span>
+              </label>
+            </div>
+            <div className="playground-results">
+              <div className="playground-card">
+                <h4>Approx</h4>
+                {playgroundApprox ? (
+                  <>
+                    <div>T50: {formatNumber(playgroundApprox.t50, 3)}s</div>
+                    <div>T90: {formatNumber(playgroundApprox.t90, 3)}s</div>
+                    <div>T100: {formatNumber(playgroundApprox.t100, 3)}s</div>
+                    <div>Messages: {formatNumber(playgroundApprox.messages, 0)}</div>
+                  </>
+                ) : (
+                  <div>Pick a scenario to start.</div>
+                )}
+              </div>
+              <div className="playground-card">
+                <h4>Live simulation</h4>
+                {liveResult ? (
+                  <>
+                    <div>T50: {formatNumber(liveResult.t50, 3)}s</div>
+                    <div>T90: {formatNumber(liveResult.t90, 3)}s</div>
+                    <div>T100: {formatNumber(liveResult.t100, 3)}s</div>
+                    <div>Messages: {formatNumber(liveResult.messages, 0)}</div>
+                  </>
+                ) : (
+                  <div>Run the live simulation.</div>
+                )}
+                {liveError && <div className="banner error">{liveError}</div>}
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={runLiveSim}
+                  disabled={liveLoading}
+                >
+                  {liveLoading ? "Running..." : "Run exact simulation"}
+                </button>
+                <p className="hint">Server: python dashboard-web/sim_server.py</p>
+              </div>
+            </div>
+          </section>
+
           <section className="comparison panel">
             <div className="panel-header">
               <h3>Comparisons</h3>

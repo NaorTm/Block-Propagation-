@@ -9,7 +9,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "sync": "node scripts/sync_data.js --once"
+    "sync": "node scripts/sync_data.js --once",
+    "sim": "python sim_server.py"
   },
   "dependencies": {
     "papaparse": "^5.5.3",

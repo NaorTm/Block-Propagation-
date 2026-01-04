@@ -337,8 +337,6 @@ def simulate_two_phase(
                     arrival = time + delivery_latency + block_time
                     enqueue(arrival, "block", dst, src)
 
-        elif event_type == "reconcile_req":
-            continue
         elif event_type in ("block", "block_full", "block_compact_ok", "missing_tx"):
             if has_full_block[dst]:
                 continue
@@ -372,9 +370,6 @@ def simulate_two_phase(
             bandwidth = _adjust_bandwidth(
                 _edge_bandwidth(bandwidth_map, src, dst), delayed, src, config
             )
-            reconcile_time = time + latency
-            if _can_send(reconcile_time, failure_times, dst):
-                enqueue(reconcile_time, "reconcile_req", dst, src)
             effective_overlap = overlap_ratio[dst]
             missing_bytes = max(
                 int((1.0 - effective_overlap) * config.block_size_bytes),

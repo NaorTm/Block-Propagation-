@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 from pathlib import Path
 import sys
 
@@ -94,6 +95,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import random
-
     main()

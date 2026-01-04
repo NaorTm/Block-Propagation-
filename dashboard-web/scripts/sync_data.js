@@ -30,6 +30,7 @@ const copyFile = () => {
 copyFile();
 
 if (!once) {
+  let watchEnabled = true;
   try {
     fs.mkdirSync(sourceDir, { recursive: true });
   } catch (error) {
@@ -37,22 +38,24 @@ if (!once) {
       `[sync-data] Unable to prepare source directory ${sourceDir}: ${error.message}`
     );
     console.warn("[sync-data] Skipping watch; continuing without live sync.");
-    return;
+    watchEnabled = false;
   }
   let timer = null;
-  try {
-    fs.watch(sourceDir, (eventType, filename) => {
-      if (!filename || filename !== path.basename(source)) {
-        return;
-      }
-      if (timer) {
-        clearTimeout(timer);
-      }
-      timer = setTimeout(copyFile, 100);
-    });
-  } catch (error) {
-    console.warn(
-      `[sync-data] Unable to watch source directory ${sourceDir}: ${error.message}`
-    );
+  if (watchEnabled) {
+    try {
+      fs.watch(sourceDir, (eventType, filename) => {
+        if (!filename || filename !== path.basename(source)) {
+          return;
+        }
+        if (timer) {
+          clearTimeout(timer);
+        }
+        timer = setTimeout(copyFile, 100);
+      });
+    } catch (error) {
+      console.warn(
+        `[sync-data] Unable to watch source directory ${sourceDir}: ${error.message}`
+      );
+    }
   }
 }

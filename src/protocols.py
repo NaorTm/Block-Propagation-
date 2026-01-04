@@ -365,7 +365,7 @@ def simulate_two_phase(
                 else bandwidths
             )
             latency = _adjust_latency(
-                _edge_latency(latency_map, src, dst), delayed, dst, config
+                _edge_latency(latency_map, src, dst), delayed, src, config
             )
             bandwidth = _adjust_bandwidth(
                 _edge_bandwidth(bandwidth_map, src, dst), delayed, src, config

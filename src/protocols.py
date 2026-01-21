@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple
 
 from .config import SimulationConfig
 from .metrics import path_stats, threshold_time
-from .network import build_network
+from .network import NetworkData, build_network
 from .results import RunResult
 
 
@@ -62,6 +62,29 @@ def _build_node_status(
     return failure_times, delayed
 
 
+def _prepare_simulation(
+    config: SimulationConfig,
+    rng: random.Random,
+    network: NetworkData | None = None,
+) -> tuple[NetworkData, List[float], List[bool], List[bool]]:
+    """
+    Common setup for all protocol simulations.
+    
+    Returns:
+        Tuple of (network_data, failure_times, delayed_flags, will_forward_flags)
+    """
+    if network is None:
+        network = build_network(config, rng)
+    
+    failure_times, delayed = _build_node_status(config, rng)
+    will_forward = [
+        True if node == config.source else rng.random() >= config.drop_prob
+        for node in range(config.num_nodes)
+    ]
+    
+    return network, failure_times, delayed, will_forward
+
+
 def _can_send(time_value: float, failure_times: List[float], node: int) -> bool:
     return time_value < failure_times[node]
 
@@ -86,39 +109,33 @@ def simulate_naive_flooding(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
-    network: tuple | None = None,
+    network: NetworkData | None = None,
 ) -> RunResult:
-    if network is None:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = build_network(config, rng)
-    else:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = network
+    """
+    Simulate naive flooding block propagation protocol.
+    
+    In naive flooding, each node immediately forwards the complete block
+    to all neighbors upon first receipt. This is bandwidth-intensive but
+    provides the fastest possible propagation.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+        include_path_stats: If True, compute path stretch/slack statistics.
+        network: Pre-built network data, or None to generate a new network.
+    
+    Returns:
+        RunResult containing arrival times, message counts, and metrics.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8)
+        >>> result = simulate_naive_flooding(config, random.Random(42))
+        >>> print(f"T90: {result.t90:.3f}s")
+    """
+    network, failure_times, delayed, will_forward = _prepare_simulation(config, rng, network)
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
-    failure_times, delayed = _build_node_status(config, rng)
-
-    will_forward = [
-        True if node == config.source else rng.random() >= config.drop_prob
-        for node in range(config.num_nodes)
-    ]
 
     pq: List[Tuple[float, str, int, int]] = []
     messages = defaultdict(int)
@@ -127,10 +144,10 @@ def simulate_naive_flooding(
 
     if will_forward[config.source] and _can_send(0.0, failure_times, config.source):
         for neighbor, is_overlay in _neighbor_map(
-            adjacency, overlay, config.source, relay_nodes
+            network.adjacency, network.overlay, config.source, network.relay_nodes
         ).items():
-            latency_map = overlay_latencies if is_overlay else latencies
-            bandwidth_map = overlay_bandwidths if is_overlay else bandwidths
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
+            bandwidth_map = network.overlay_bandwidths if is_overlay else network.bandwidths
             latency = _adjust_latency(
                 _edge_latency(latency_map, config.source, neighbor),
                 delayed,
@@ -160,10 +177,10 @@ def simulate_naive_flooding(
         if not will_forward[dst] or not _can_send(time, failure_times, dst):
             continue
         for neighbor, is_overlay in _neighbor_map(
-            adjacency, overlay, dst, relay_nodes
+            network.adjacency, network.overlay, dst, network.relay_nodes
         ).items():
-            latency_map = overlay_latencies if is_overlay else latencies
-            bandwidth_map = overlay_bandwidths if is_overlay else bandwidths
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
+            bandwidth_map = network.overlay_bandwidths if is_overlay else network.bandwidths
             latency = _adjust_latency(
                 _edge_latency(latency_map, dst, neighbor), delayed, dst, config
             )
@@ -182,14 +199,14 @@ def simulate_naive_flooding(
     stats = (
         path_stats(
             arrival_times,
-            adjacency,
-            latencies,
-            bandwidths,
+            network.adjacency,
+            network.latencies,
+            network.bandwidths,
             config,
             config.source,
-            overlay_adjacency=overlay,
-            overlay_latencies=overlay_latencies,
-            overlay_bandwidths=overlay_bandwidths,
+            overlay_adjacency=network.overlay,
+            overlay_latencies=network.overlay_latencies,
+            overlay_bandwidths=network.overlay_bandwidths,
         )
         if include_path_stats
         else None
@@ -205,8 +222,8 @@ def simulate_naive_flooding(
         messages=dict(messages),
         per_node_messages=per_node_messages,
         per_edge_messages=dict(per_edge_messages),
-        bottleneck_nodes=bottleneck_nodes,
-        relay_nodes=relay_nodes,
+        bottleneck_nodes=network.bottleneck_nodes,
+        relay_nodes=network.relay_nodes,
         path_stats=stats,
     )
 
@@ -216,35 +233,35 @@ def simulate_two_phase(
     rng: random.Random,
     include_path_stats: bool = False,
     compact_blocks: bool = False,
-    network: tuple | None = None,
+    network: NetworkData | None = None,
 ) -> RunResult:
-    if network is None:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = build_network(config, rng)
-    else:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = network
+    """
+    Simulate two-phase block propagation protocol.
+    
+    In two-phase protocol, nodes first send lightweight announcements,
+    then recipients request the full block. This reduces redundant
+    transmissions at the cost of additional round-trip latency.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+        include_path_stats: If True, compute path stretch/slack statistics.
+        compact_blocks: If True, use compact block optimization.
+        network: Pre-built network data, or None to generate a new network.
+    
+    Returns:
+        RunResult containing arrival times, message counts, and metrics.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8)
+        >>> result = simulate_two_phase(config, random.Random(42))
+        >>> print(f"T90: {result.t90:.3f}s")
+    """
+    network, failure_times, delayed, will_forward = _prepare_simulation(config, rng, network)
 
     knows_block = [False] * config.num_nodes
     has_full_block = [False] * config.num_nodes
     arrival_times = [math.inf] * config.num_nodes
-    failure_times, delayed = _build_node_status(config, rng)
 
     source = config.source
     overlap_mean = (
@@ -257,10 +274,6 @@ def simulate_two_phase(
         for _ in range(config.num_nodes)
     ]
     overlap_ratio[source] = 1.0
-    will_forward = [
-        True if node == source else rng.random() >= config.drop_prob
-        for node in range(config.num_nodes)
-    ]
     knows_block[source] = True
     has_full_block[source] = True
     arrival_times[source] = 0.0
@@ -278,9 +291,9 @@ def simulate_two_phase(
 
     if will_forward[source] and _can_send(0.0, failure_times, source):
         for neighbor, is_overlay in _neighbor_map(
-            adjacency, overlay, source, relay_nodes
+            network.adjacency, network.overlay, source, network.relay_nodes
         ).items():
-            latency_map = overlay_latencies if is_overlay else latencies
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
             latency = _adjust_latency(
                 _edge_latency(latency_map, source, neighbor), delayed, source, config
             )
@@ -292,7 +305,7 @@ def simulate_two_phase(
         if event_type == "announce":
             if not knows_block[dst]:
                 knows_block[dst] = True
-                latency_map = overlay_latencies if src in relay_nodes and dst in relay_nodes and dst in overlay[src] else latencies
+                latency_map = network.overlay_latencies if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src] else network.latencies
                 back_latency = _adjust_latency(
                     _edge_latency(latency_map, src, dst), delayed, dst, config
                 )
@@ -307,14 +320,14 @@ def simulate_two_phase(
                 and _can_send(time, failure_times, dst)
             ):
                 latency_map = (
-                    overlay_latencies
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else latencies
+                    network.overlay_latencies
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.latencies
                 )
                 bandwidth_map = (
-                    overlay_bandwidths
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else bandwidths
+                    network.overlay_bandwidths
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.bandwidths
                 )
                 delivery_latency = _adjust_latency(
                     _edge_latency(latency_map, src, dst), delayed, dst, config
@@ -345,24 +358,24 @@ def simulate_two_phase(
 
             if will_forward[dst] and _can_send(time, failure_times, dst):
                 for neighbor, is_overlay in _neighbor_map(
-                    adjacency, overlay, dst, relay_nodes
+                    network.adjacency, network.overlay, dst, network.relay_nodes
                 ).items():
                     if not knows_block[neighbor]:
-                        latency_map = overlay_latencies if is_overlay else latencies
+                        latency_map = network.overlay_latencies if is_overlay else network.latencies
                         latency = _adjust_latency(
                             _edge_latency(latency_map, dst, neighbor), delayed, dst, config
                         )
                         enqueue(time + latency, "announce", dst, neighbor)
         elif event_type == "block_compact_fail":
             latency_map = (
-                overlay_latencies
-                if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                else latencies
+                network.overlay_latencies
+                if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                else network.latencies
             )
             bandwidth_map = (
-                overlay_bandwidths
-                if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                else bandwidths
+                network.overlay_bandwidths
+                if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                else network.bandwidths
             )
             latency = _adjust_latency(
                 _edge_latency(latency_map, src, dst), delayed, src, config
@@ -390,14 +403,14 @@ def simulate_two_phase(
     stats = (
         path_stats(
             arrival_times,
-            adjacency,
-            latencies,
-            bandwidths,
+            network.adjacency,
+            network.latencies,
+            network.bandwidths,
             config,
             config.source,
-            overlay_adjacency=overlay,
-            overlay_latencies=overlay_latencies,
-            overlay_bandwidths=overlay_bandwidths,
+            overlay_adjacency=network.overlay,
+            overlay_latencies=network.overlay_latencies,
+            overlay_bandwidths=network.overlay_bandwidths,
         )
         if include_path_stats
         else None
@@ -413,8 +426,8 @@ def simulate_two_phase(
         messages=dict(messages),
         per_node_messages=per_node_messages,
         per_edge_messages=dict(per_edge_messages),
-        bottleneck_nodes=bottleneck_nodes,
-        relay_nodes=relay_nodes,
+        bottleneck_nodes=network.bottleneck_nodes,
+        relay_nodes=network.relay_nodes,
         path_stats=stats,
     )
 
@@ -423,39 +436,33 @@ def simulate_push(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
-    network: tuple | None = None,
+    network: NetworkData | None = None,
 ) -> RunResult:
-    if network is None:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = build_network(config, rng)
-    else:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = network
+    """
+    Simulate push gossip block propagation protocol.
+    
+    In push gossip, nodes forward blocks to a random subset (fanout)
+    of neighbors. This balances bandwidth usage and propagation speed
+    by limiting the number of transmissions per node.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+        include_path_stats: If True, compute path stretch/slack statistics.
+        network: Pre-built network data, or None to generate a new network.
+    
+    Returns:
+        RunResult containing arrival times, message counts, and metrics.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8, gossip_fanout=4)
+        >>> result = simulate_push(config, random.Random(42))
+        >>> print(f"T90: {result.t90:.3f}s")
+    """
+    network, failure_times, delayed, will_forward = _prepare_simulation(config, rng, network)
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
-    failure_times, delayed = _build_node_status(config, rng)
-
-    will_forward = [
-        True if node == config.source else rng.random() >= config.drop_prob
-        for node in range(config.num_nodes)
-    ]
 
     pq: List[Tuple[float, str, int, int]] = []
     messages = defaultdict(int)
@@ -463,14 +470,14 @@ def simulate_push(
     per_edge_messages: Dict[Tuple[int, int], int] = defaultdict(int)
 
     if will_forward[config.source] and _can_send(0.0, failure_times, config.source):
-        neighbors = _select_neighbors(adjacency, config.source, rng, config.gossip_fanout)
+        neighbors = _select_neighbors(network.adjacency, config.source, rng, config.gossip_fanout)
         overlay_neighbors = list(
-            _neighbor_map(adjacency, overlay, config.source, relay_nodes).keys()
+            _neighbor_map(network.adjacency, network.overlay, config.source, network.relay_nodes).keys()
         )
         for neighbor in set(neighbors + overlay_neighbors):
-            is_overlay = config.source in relay_nodes and neighbor in overlay[config.source]
-            latency_map = overlay_latencies if is_overlay else latencies
-            bandwidth_map = overlay_bandwidths if is_overlay else bandwidths
+            is_overlay = config.source in network.relay_nodes and neighbor in network.overlay[config.source]
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
+            bandwidth_map = network.overlay_bandwidths if is_overlay else network.bandwidths
             latency = _adjust_latency(
                 _edge_latency(latency_map, config.source, neighbor),
                 delayed,
@@ -498,12 +505,12 @@ def simulate_push(
         arrival_times[dst] = time
         if not will_forward[dst] or not _can_send(time, failure_times, dst):
             continue
-        neighbors = _select_neighbors(adjacency, dst, rng, config.gossip_fanout)
-        overlay_neighbors = list(_neighbor_map(adjacency, overlay, dst, relay_nodes).keys())
+        neighbors = _select_neighbors(network.adjacency, dst, rng, config.gossip_fanout)
+        overlay_neighbors = list(_neighbor_map(network.adjacency, network.overlay, dst, network.relay_nodes).keys())
         for neighbor in set(neighbors + overlay_neighbors):
-            is_overlay = dst in relay_nodes and neighbor in overlay[dst]
-            latency_map = overlay_latencies if is_overlay else latencies
-            bandwidth_map = overlay_bandwidths if is_overlay else bandwidths
+            is_overlay = dst in network.relay_nodes and neighbor in network.overlay[dst]
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
+            bandwidth_map = network.overlay_bandwidths if is_overlay else network.bandwidths
             latency = _adjust_latency(
                 _edge_latency(latency_map, dst, neighbor), delayed, dst, config
             )
@@ -522,14 +529,14 @@ def simulate_push(
     stats = (
         path_stats(
             arrival_times,
-            adjacency,
-            latencies,
-            bandwidths,
+            network.adjacency,
+            network.latencies,
+            network.bandwidths,
             config,
             config.source,
-            overlay_adjacency=overlay,
-            overlay_latencies=overlay_latencies,
-            overlay_bandwidths=overlay_bandwidths,
+            overlay_adjacency=network.overlay,
+            overlay_latencies=network.overlay_latencies,
+            overlay_bandwidths=network.overlay_bandwidths,
         )
         if include_path_stats
         else None
@@ -545,8 +552,8 @@ def simulate_push(
         messages=dict(messages),
         per_node_messages=per_node_messages,
         per_edge_messages=dict(per_edge_messages),
-        bottleneck_nodes=bottleneck_nodes,
-        relay_nodes=relay_nodes,
+        bottleneck_nodes=network.bottleneck_nodes,
+        relay_nodes=network.relay_nodes,
         path_stats=stats,
     )
 
@@ -555,41 +562,35 @@ def simulate_pull(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
-    network: tuple | None = None,
+    network: NetworkData | None = None,
 ) -> RunResult:
-    if network is None:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = build_network(config, rng)
-    else:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = network
+    """
+    Simulate pull gossip block propagation protocol.
+    
+    In pull gossip, nodes periodically poll random neighbors for new
+    blocks. This is bandwidth-efficient but slower than push protocols
+    due to polling intervals.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+        include_path_stats: If True, compute path stretch/slack statistics.
+        network: Pre-built network data, or None to generate a new network.
+    
+    Returns:
+        RunResult containing arrival times, message counts, and metrics.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8, pull_interval=1.0)
+        >>> result = simulate_pull(config, random.Random(42))
+        >>> print(f"T90: {result.t90:.3f}s")
+    """
+    network, failure_times, delayed, will_forward = _prepare_simulation(config, rng, network)
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
     has_full_block = [False] * config.num_nodes
     has_full_block[config.source] = True
-    failure_times, delayed = _build_node_status(config, rng)
-
-    will_forward = [
-        True if node == config.source else rng.random() >= config.drop_prob
-        for node in range(config.num_nodes)
-    ]
 
     pq: List[Tuple[float, str, int, int]] = []
     messages = defaultdict(int)
@@ -609,9 +610,9 @@ def simulate_pull(
         if event_type == "pull":
             if has_full_block[src]:
                 continue
-            for neighbor in _select_neighbors(adjacency, src, rng, config.pull_fanout):
+            for neighbor in _select_neighbors(network.adjacency, src, rng, config.pull_fanout):
                 latency = _adjust_latency(
-                    _edge_latency(latencies, src, neighbor), delayed, src, config
+                    _edge_latency(network.latencies, src, neighbor), delayed, src, config
                 )
                 if _can_send(time, failure_times, src):
                     heapq.heappush(pq, (time + latency, "pull_req", src, neighbor))
@@ -628,14 +629,14 @@ def simulate_pull(
                 and _can_send(time, failure_times, dst)
             ):
                 latency_map = (
-                    overlay_latencies
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else latencies
+                    network.overlay_latencies
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.latencies
                 )
                 bandwidth_map = (
-                    overlay_bandwidths
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else bandwidths
+                    network.overlay_bandwidths
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.bandwidths
                 )
                 latency = _adjust_latency(
                     _edge_latency(latency_map, src, dst), delayed, dst, config
@@ -662,14 +663,14 @@ def simulate_pull(
     stats = (
         path_stats(
             arrival_times,
-            adjacency,
-            latencies,
-            bandwidths,
+            network.adjacency,
+            network.latencies,
+            network.bandwidths,
             config,
             config.source,
-            overlay_adjacency=overlay,
-            overlay_latencies=overlay_latencies,
-            overlay_bandwidths=overlay_bandwidths,
+            overlay_adjacency=network.overlay,
+            overlay_latencies=network.overlay_latencies,
+            overlay_bandwidths=network.overlay_bandwidths,
         )
         if include_path_stats
         else None
@@ -685,8 +686,8 @@ def simulate_pull(
         messages=dict(messages),
         per_node_messages=per_node_messages,
         per_edge_messages=dict(per_edge_messages),
-        bottleneck_nodes=bottleneck_nodes,
-        relay_nodes=relay_nodes,
+        bottleneck_nodes=network.bottleneck_nodes,
+        relay_nodes=network.relay_nodes,
         path_stats=stats,
     )
 
@@ -695,41 +696,35 @@ def simulate_push_pull(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
-    network: tuple | None = None,
+    network: NetworkData | None = None,
 ) -> RunResult:
-    if network is None:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = build_network(config, rng)
-    else:
-        (
-            adjacency,
-            latencies,
-            bandwidths,
-            bottleneck_nodes,
-            relay_nodes,
-            overlay,
-            overlay_latencies,
-            overlay_bandwidths,
-        ) = network
+    """
+    Simulate hybrid push-pull gossip block propagation protocol.
+    
+    Hybrid protocol combining push and pull gossip mechanisms. Nodes
+    proactively push blocks to a subset of neighbors while also
+    periodically polling for new blocks, balancing speed and efficiency.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+        include_path_stats: If True, compute path stretch/slack statistics.
+        network: Pre-built network data, or None to generate a new network.
+    
+    Returns:
+        RunResult containing arrival times, message counts, and metrics.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8, gossip_fanout=4)
+        >>> result = simulate_push_pull(config, random.Random(42))
+        >>> print(f"T90: {result.t90:.3f}s")
+    """
+    network, failure_times, delayed, will_forward = _prepare_simulation(config, rng, network)
 
     arrival_times = [math.inf] * config.num_nodes
     arrival_times[config.source] = 0.0
     has_full_block = [False] * config.num_nodes
     has_full_block[config.source] = True
-    failure_times, delayed = _build_node_status(config, rng)
-
-    will_forward = [
-        True if node == config.source else rng.random() >= config.drop_prob
-        for node in range(config.num_nodes)
-    ]
 
     pq: List[Tuple[float, str, int, int]] = []
     messages = defaultdict(int)
@@ -739,12 +734,12 @@ def simulate_push_pull(
     def send_push(src: int, time: float) -> None:
         if not _can_send(time, failure_times, src):
             return
-        neighbors = _select_neighbors(adjacency, src, rng, config.gossip_fanout)
-        overlay_neighbors = list(_neighbor_map(adjacency, overlay, src, relay_nodes).keys())
+        neighbors = _select_neighbors(network.adjacency, src, rng, config.gossip_fanout)
+        overlay_neighbors = list(_neighbor_map(network.adjacency, network.overlay, src, network.relay_nodes).keys())
         for neighbor in set(neighbors + overlay_neighbors):
-            is_overlay = src in relay_nodes and neighbor in overlay[src]
-            latency_map = overlay_latencies if is_overlay else latencies
-            bandwidth_map = overlay_bandwidths if is_overlay else bandwidths
+            is_overlay = src in network.relay_nodes and neighbor in network.overlay[src]
+            latency_map = network.overlay_latencies if is_overlay else network.latencies
+            bandwidth_map = network.overlay_bandwidths if is_overlay else network.bandwidths
             latency = _adjust_latency(
                 _edge_latency(latency_map, src, neighbor), delayed, src, config
             )
@@ -773,9 +768,9 @@ def simulate_push_pull(
         if event_type == "pull":
             if has_full_block[src]:
                 continue
-            for neighbor in _select_neighbors(adjacency, src, rng, config.pull_fanout):
+            for neighbor in _select_neighbors(network.adjacency, src, rng, config.pull_fanout):
                 latency = _adjust_latency(
-                    _edge_latency(latencies, src, neighbor), delayed, src, config
+                    _edge_latency(network.latencies, src, neighbor), delayed, src, config
                 )
                 if _can_send(time, failure_times, src):
                     heapq.heappush(pq, (time + latency, "pull_req", src, neighbor))
@@ -792,14 +787,14 @@ def simulate_push_pull(
                 and _can_send(time, failure_times, dst)
             ):
                 latency_map = (
-                    overlay_latencies
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else latencies
+                    network.overlay_latencies
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.latencies
                 )
                 bandwidth_map = (
-                    overlay_bandwidths
-                    if src in relay_nodes and dst in relay_nodes and dst in overlay[src]
-                    else bandwidths
+                    network.overlay_bandwidths
+                    if src in network.relay_nodes and dst in network.relay_nodes and dst in network.overlay[src]
+                    else network.bandwidths
                 )
                 latency = _adjust_latency(
                     _edge_latency(latency_map, src, dst), delayed, dst, config
@@ -828,14 +823,14 @@ def simulate_push_pull(
     stats = (
         path_stats(
             arrival_times,
-            adjacency,
-            latencies,
-            bandwidths,
+            network.adjacency,
+            network.latencies,
+            network.bandwidths,
             config,
             config.source,
-            overlay_adjacency=overlay,
-            overlay_latencies=overlay_latencies,
-            overlay_bandwidths=overlay_bandwidths,
+            overlay_adjacency=network.overlay,
+            overlay_latencies=network.overlay_latencies,
+            overlay_bandwidths=network.overlay_bandwidths,
         )
         if include_path_stats
         else None
@@ -851,7 +846,7 @@ def simulate_push_pull(
         messages=dict(messages),
         per_node_messages=per_node_messages,
         per_edge_messages=dict(per_edge_messages),
-        bottleneck_nodes=bottleneck_nodes,
-        relay_nodes=relay_nodes,
+        bottleneck_nodes=network.bottleneck_nodes,
+        relay_nodes=network.relay_nodes,
         path_stats=stats,
     )

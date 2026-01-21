@@ -1,11 +1,34 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Sequence, Tuple
 
 import networkx as nx
 
 from .config import SimulationConfig
+
+
+class NetworkData(NamedTuple):
+    """Network structure and properties for simulation.
+    
+    Attributes:
+        adjacency: List of neighbor sets for each node.
+        latencies: Edge latency map in seconds.
+        bandwidths: Edge bandwidth map in Mbps.
+        bottleneck_nodes: Set of nodes with degraded performance.
+        relay_nodes: Set of nodes in the relay network.
+        overlay: List of overlay neighbor sets for relay nodes.
+        overlay_latencies: Edge latency map for overlay network.
+        overlay_bandwidths: Edge bandwidth map for overlay network.
+    """
+    adjacency: List[set]
+    latencies: Dict[Tuple[int, int], float]
+    bandwidths: Dict[Tuple[int, int], float]
+    bottleneck_nodes: set[int]
+    relay_nodes: set[int]
+    overlay: List[set]
+    overlay_latencies: Dict[Tuple[int, int], float]
+    overlay_bandwidths: Dict[Tuple[int, int], float]
 
 
 def generate_random_regular_graph(
@@ -174,16 +197,22 @@ def assign_bandwidths(
 
 def build_network(
     config: SimulationConfig, rng: random.Random
-) -> tuple[
-    List[set],
-    Dict[Tuple[int, int], float],
-    Dict[Tuple[int, int], float],
-    set[int],
-    set[int],
-    List[set],
-    Dict[Tuple[int, int], float],
-    Dict[Tuple[int, int], float],
-]:
+) -> NetworkData:
+    """Build a complete network with all properties for simulation.
+    
+    Args:
+        config: Simulation configuration parameters.
+        rng: Random number generator for reproducibility.
+    
+    Returns:
+        NetworkData containing all network structures and properties.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8)
+        >>> network = build_network(config, random.Random(42))
+        >>> print(len(network.adjacency))
+        100
+    """
     adjacency = generate_graph(config, rng)
     bottleneck_nodes = select_bottleneck_nodes(
         config.num_nodes, config.bottleneck_fraction, rng
@@ -200,13 +229,13 @@ def build_network(
     bandwidths = assign_bandwidths(adjacency, config, rng, bottleneck_nodes, relay_nodes)
     overlay_latencies = assign_latencies(overlay, config, rng, bottleneck_nodes, relay_nodes)
     overlay_bandwidths = assign_bandwidths(overlay, config, rng, bottleneck_nodes, relay_nodes)
-    return (
-        adjacency,
-        latencies,
-        bandwidths,
-        bottleneck_nodes,
-        relay_nodes,
-        overlay,
-        overlay_latencies,
-        overlay_bandwidths,
+    return NetworkData(
+        adjacency=adjacency,
+        latencies=latencies,
+        bandwidths=bandwidths,
+        bottleneck_nodes=bottleneck_nodes,
+        relay_nodes=relay_nodes,
+        overlay=overlay,
+        overlay_latencies=overlay_latencies,
+        overlay_bandwidths=overlay_bandwidths,
     )

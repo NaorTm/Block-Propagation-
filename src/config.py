@@ -51,6 +51,34 @@ class SimulationConfig:
     delay_bandwidth_mult: float = 1.0
     source: int = 0
 
+    def __post_init__(self):
+        if self.num_nodes < 2:
+            raise ValueError("num_nodes must be at least 2")
+        if self.degree < 1:
+            raise ValueError("degree must be at least 1")
+        if self.degree >= self.num_nodes:
+            raise ValueError("degree must be less than num_nodes")
+        if not 0 <= self.drop_prob <= 1:
+            raise ValueError("drop_prob must be between 0 and 1")
+        if self.block_size_bytes <= 0:
+            raise ValueError("block_size_bytes must be positive")
+        if self.source < 0 or self.source >= self.num_nodes:
+            raise ValueError("source must be a valid node index")
+        if self.bandwidth_mbps <= 0:
+            raise ValueError("bandwidth_mbps must be positive")
+        if not 0 <= self.compact_success_prob <= 1:
+            raise ValueError("compact_success_prob must be between 0 and 1")
+        if not 0 <= self.mempool_sync_prob <= 1:
+            raise ValueError("mempool_sync_prob must be between 0 and 1")
+        if not 0 <= self.churn_prob <= 1:
+            raise ValueError("churn_prob must be between 0 and 1")
+        if not 0 <= self.delay_prob <= 1:
+            raise ValueError("delay_prob must be between 0 and 1")
+        if not 0 <= self.bottleneck_fraction <= 1:
+            raise ValueError("bottleneck_fraction must be between 0 and 1")
+        if not 0 <= self.relay_fraction <= 1:
+            raise ValueError("relay_fraction must be between 0 and 1")
+
     def transmission_time(self, bandwidth_mbps: float, block_size_bytes: int | None = None) -> float:
         """Seconds to transmit the full block over one edge."""
 

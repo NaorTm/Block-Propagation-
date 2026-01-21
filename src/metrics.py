@@ -41,8 +41,21 @@ class BottleneckValidation:
 
 
 def threshold_time(arrival_times: Sequence[float], fraction: float) -> float:
-    """Return the time when the given fraction of nodes have the block."""
-
+    """Calculate the time when a given fraction of nodes have received the block.
+    
+    Args:
+        arrival_times: List of arrival times for each node (may contain inf).
+        fraction: Target fraction of nodes (0.0 to 1.0).
+    
+    Returns:
+        Time when fraction of all nodes have received the block, or inf if
+        insufficient nodes received it.
+    
+    Example:
+        >>> arrivals = [0.0, 0.1, 0.2, 0.3, 0.4]
+        >>> threshold_time(arrivals, 0.5)  # T50
+        0.2
+    """
     finite_times = sorted(t for t in arrival_times if math.isfinite(t))
     if not finite_times:
         return math.inf
@@ -56,6 +69,24 @@ def threshold_time(arrival_times: Sequence[float], fraction: float) -> float:
 
 
 def arrival_histogram(arrival_times: Sequence[float], bins: int) -> List[Tuple[float, float, int, float]]:
+    """Create histogram of arrival times with cumulative distribution.
+    
+    Args:
+        arrival_times: List of arrival times for each node.
+        bins: Number of histogram bins.
+    
+    Returns:
+        List of tuples (bin_start, bin_end, count, cumulative_fraction).
+    
+    Raises:
+        ValueError: If bins is not positive.
+    
+    Example:
+        >>> arrivals = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        >>> hist = arrival_histogram(arrivals, bins=3)
+        >>> len(hist)
+        3
+    """
     finite_times = sorted(t for t in arrival_times if math.isfinite(t))
     if not finite_times:
         return []
@@ -86,6 +117,15 @@ def arrival_histogram(arrival_times: Sequence[float], bins: int) -> List[Tuple[f
 
 
 def format_histogram(arrival_times: Sequence[float], bins: int) -> str:
+    """Format arrival time histogram as human-readable string.
+    
+    Args:
+        arrival_times: List of arrival times for each node.
+        bins: Number of histogram bins.
+    
+    Returns:
+        Multi-line string representation of histogram.
+    """
     rows = arrival_histogram(arrival_times, bins)
     if not rows:
         return "No arrivals to summarize."
@@ -101,6 +141,26 @@ def format_histogram(arrival_times: Sequence[float], bins: int) -> str:
 def macro_metrics(
     arrival_times: Sequence[float], block_interval: float
 ) -> MacroMetrics:
+    """Calculate macro-level network metrics for blockchain security analysis.
+    
+    Computes metrics related to competing blocks, orphan risk, and security
+    margins based on arrival time distribution.
+    
+    Args:
+        arrival_times: List of arrival times for each node.
+        block_interval: Average time between blocks (e.g., 600s for Bitcoin).
+    
+    Returns:
+        MacroMetrics containing competing block probabilities and security margins.
+    
+    Raises:
+        ValueError: If block_interval is not positive.
+    
+    Example:
+        >>> arrivals = [0.0, 0.1, 0.2, 0.3, 0.4]
+        >>> metrics = macro_metrics(arrivals, block_interval=600.0)
+        >>> print(f"Security margin: {metrics.security_margin_t50:.2%}")
+    """
     if block_interval <= 0:
         raise ValueError("block_interval must be positive")
     t50 = threshold_time(arrival_times, 0.5)

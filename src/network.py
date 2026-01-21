@@ -34,8 +34,21 @@ class NetworkData(NamedTuple):
 def generate_random_regular_graph(
     num_nodes: int, degree: int, rng: random.Random, max_attempts: int = 200
 ) -> List[set]:
-    """Generate a random regular graph."""
-
+    """Generate a random regular graph where all nodes have the same degree.
+    
+    Args:
+        num_nodes: Number of nodes in the graph.
+        degree: Number of edges per node.
+        rng: Random number generator for reproducibility.
+        max_attempts: Maximum attempts for graph generation.
+    
+    Returns:
+        Adjacency list representation as list of neighbor sets.
+    
+    Raises:
+        ValueError: If parameters are invalid for graph generation.
+        RuntimeError: If graph generation fails after max attempts.
+    """
     if num_nodes <= 1:
         raise ValueError("Number of nodes must be at least 2")
     if degree >= num_nodes:
@@ -54,10 +67,39 @@ def generate_random_regular_graph(
 
 
 def adjacency_from_graph(graph: nx.Graph) -> List[set]:
+    """Convert NetworkX graph to adjacency list representation.
+    
+    Args:
+        graph: NetworkX graph object.
+    
+    Returns:
+        List where index i contains set of neighbors of node i.
+    """
     return [set(graph.neighbors(node)) for node in graph.nodes]
 
 
 def generate_graph(config: SimulationConfig, rng: random.Random) -> List[set]:
+    """Generate network topology based on configuration.
+    
+    Supports multiple topology types: random-regular, scale-free, small-world,
+    star, and line graphs.
+    
+    Args:
+        config: Simulation configuration containing topology type and parameters.
+        rng: Random number generator for reproducibility.
+    
+    Returns:
+        Adjacency list representation of the generated graph.
+    
+    Raises:
+        ValueError: If topology type is unknown or parameters are invalid.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=50, topology="scale-free")
+        >>> adjacency = generate_graph(config, random.Random(42))
+        >>> print(len(adjacency))
+        50
+    """
     if config.topology == "random-regular":
         return generate_random_regular_graph(config.num_nodes, config.degree, rng)
     if config.topology == "scale-free":
@@ -87,6 +129,16 @@ def generate_graph(config: SimulationConfig, rng: random.Random) -> List[set]:
 def select_bottleneck_nodes(
     num_nodes: int, fraction: float, rng: random.Random
 ) -> set[int]:
+    """Select nodes to act as bottlenecks with degraded performance.
+    
+    Args:
+        num_nodes: Total number of nodes in the network.
+        fraction: Fraction of nodes to mark as bottlenecks (0.0 to 1.0).
+        rng: Random number generator for reproducibility.
+    
+    Returns:
+        Set of node indices selected as bottlenecks.
+    """
     if fraction <= 0:
         return set()
     count = int(round(num_nodes * fraction))
@@ -97,6 +149,16 @@ def select_bottleneck_nodes(
 
 
 def select_relay_nodes(num_nodes: int, fraction: float, rng: random.Random) -> set[int]:
+    """Select nodes to participate in relay overlay network.
+    
+    Args:
+        num_nodes: Total number of nodes in the network.
+        fraction: Fraction of nodes to mark as relay nodes (0.0 to 1.0).
+        rng: Random number generator for reproducibility.
+    
+    Returns:
+        Set of node indices selected as relay nodes.
+    """
     if fraction <= 0:
         return set()
     count = int(round(num_nodes * fraction))
@@ -113,6 +175,21 @@ def build_relay_overlay(
     degree: int,
     prob: float,
 ) -> List[set]:
+    """Build an overlay network connecting relay nodes.
+    
+    Creates additional connections between relay nodes for faster propagation.
+    Uses either fixed degree or probabilistic edge creation.
+    
+    Args:
+        num_nodes: Total number of nodes in the network.
+        relay_nodes: Set of nodes participating in relay network.
+        rng: Random number generator for reproducibility.
+        degree: Fixed number of overlay connections per relay node (if > 0).
+        prob: Probability of overlay edge between relay nodes (if degree == 0).
+    
+    Returns:
+        Adjacency list for overlay network (empty sets for non-relay nodes).
+    """
     overlay = [set() for _ in range(num_nodes)]
     relay_list = list(relay_nodes)
     if not relay_list:
@@ -146,8 +223,24 @@ def assign_latencies(
     bottleneck_nodes: set[int],
     relay_nodes: set[int],
 ) -> Dict[Tuple[int, int], float]:
-    """Assign a symmetric latency to each edge."""
-
+    """Assign symmetric latency to each edge based on configuration.
+    
+    Latencies are drawn from uniform or lognormal distribution and adjusted
+    for bottleneck and relay nodes.
+    
+    Args:
+        adjacency: Network adjacency list.
+        config: Configuration with latency distribution parameters.
+        rng: Random number generator for reproducibility.
+        bottleneck_nodes: Nodes with increased latency.
+        relay_nodes: Nodes in relay network with adjusted latency.
+    
+    Returns:
+        Dictionary mapping edge (u,v) where u<v to latency in seconds.
+    
+    Raises:
+        ValueError: If latency distribution type is unknown.
+    """
     latencies: Dict[Tuple[int, int], float] = {}
     for u, neighbors in enumerate(adjacency):
         for v in neighbors:
@@ -173,8 +266,24 @@ def assign_bandwidths(
     bottleneck_nodes: set[int],
     relay_nodes: set[int],
 ) -> Dict[Tuple[int, int], float]:
-    """Assign a symmetric bandwidth (Mbps) to each edge."""
-
+    """Assign symmetric bandwidth to each edge based on configuration.
+    
+    Bandwidths are drawn from fixed, uniform, or lognormal distribution
+    and adjusted for bottleneck and relay nodes.
+    
+    Args:
+        adjacency: Network adjacency list.
+        config: Configuration with bandwidth distribution parameters.
+        rng: Random number generator for reproducibility.
+        bottleneck_nodes: Nodes with reduced bandwidth.
+        relay_nodes: Nodes in relay network with adjusted bandwidth.
+    
+    Returns:
+        Dictionary mapping edge (u,v) where u<v to bandwidth in Mbps.
+    
+    Raises:
+        ValueError: If bandwidth distribution type is unknown.
+    """
     bandwidths: Dict[Tuple[int, int], float] = {}
     for u, neighbors in enumerate(adjacency):
         for v in neighbors:

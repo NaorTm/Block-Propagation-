@@ -26,6 +26,23 @@ from .results import AggregateResult, RunResult
 
 
 def summarize_runs(protocol: str, runs: List[RunResult]) -> AggregateResult:
+    """Aggregate statistics from multiple simulation runs.
+    
+    Args:
+        protocol: Name of the protocol being tested.
+        runs: List of individual run results to aggregate.
+    
+    Returns:
+        AggregateResult containing mean/min/max statistics across runs.
+    
+    Raises:
+        ValueError: If runs list is empty.
+    
+    Example:
+        >>> results = [run1, run2, run3]
+        >>> aggregate = summarize_runs("naive", results)
+        >>> print(aggregate.summary["t90"]["mean"])
+    """
     if not runs:
         raise ValueError("At least one run result is required to summarize metrics.")
 
@@ -56,6 +73,27 @@ def run_experiments(
     seed: int | None,
     include_path_stats: bool = False,
 ) -> AggregateResult:
+    """Run multiple simulations of a protocol and aggregate results.
+    
+    Args:
+        protocol: Protocol name ('naive', 'two-phase', 'push', 'pull', 
+                  'push-pull', or 'bitcoin-compact').
+        runs: Number of simulation runs to execute.
+        config: Configuration parameters for each simulation.
+        seed: Random seed for reproducibility (None for random).
+        include_path_stats: Whether to compute path statistics.
+    
+    Returns:
+        AggregateResult containing statistics across all runs.
+    
+    Raises:
+        ValueError: If runs <= 0 or protocol is unknown.
+    
+    Example:
+        >>> config = SimulationConfig(num_nodes=100, degree=8)
+        >>> result = run_experiments("naive", runs=10, config=config, seed=42)
+        >>> print(f"Mean T90: {result.summary['t90']['mean']:.3f}s")
+    """
     if runs <= 0:
         raise ValueError("Number of runs must be positive.")
 
@@ -98,6 +136,23 @@ def format_run_result(
     validate_bottlenecks_flag: bool = False,
     validate_bottleneck_edges_flag: bool = False,
 ) -> str:
+    """Format a single run result as a human-readable string.
+    
+    Args:
+        result: The simulation result to format.
+        show_overhead: Include top nodes/edges by message count.
+        top_k: Number of top items to show.
+        detect_bottlenecks_flag: Detect and show bottleneck nodes.
+        bottleneck_fraction: Fraction of slowest nodes to consider.
+        show_macro: Include macro-level blockchain security metrics.
+        block_interval: Average time between blocks for macro metrics.
+        macro_sim_trials: Number of Monte Carlo trials for orphan simulation.
+        validate_bottlenecks_flag: Validate detected bottlenecks.
+        validate_bottleneck_edges_flag: Validate detected bottleneck edges.
+    
+    Returns:
+        Formatted string with selected metrics and statistics.
+    """
     parts = [
         f"Protocol: {result.protocol}",
         f"T50: {result.t50:.3f}s, T90: {result.t90:.3f}s, T100: {result.t100:.3f}s",
@@ -190,6 +245,14 @@ def format_run_result(
 
 
 def format_aggregate(aggregate: AggregateResult) -> str:
+    """Format aggregate results as multi-line string.
+    
+    Args:
+        aggregate: Aggregated results from multiple runs.
+    
+    Returns:
+        Multi-line string with mean/min/max statistics.
+    """
     lines = [f"Protocol: {aggregate.protocol} (runs={len(aggregate.runs)})"]
     for metric in ("t50", "t90", "t100", "messages"):
         stats = aggregate.summary[metric]
@@ -202,6 +265,15 @@ def format_aggregate(aggregate: AggregateResult) -> str:
 
 
 def format_histogram_if_requested(result: RunResult, bins: int) -> str | None:
+    """Format arrival histogram if bins > 0.
+    
+    Args:
+        result: Simulation result containing arrival times.
+        bins: Number of histogram bins (0 to skip).
+    
+    Returns:
+        Formatted histogram string or None if bins <= 0.
+    """
     if bins <= 0:
         return None
     return format_histogram(result.arrival_times, bins)

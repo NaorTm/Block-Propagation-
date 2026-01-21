@@ -116,6 +116,10 @@ function App() {
   const [compareTarget, setCompareTarget] = useState("");
   const [compareMode, setCompareMode] = useState("absolute");
   const [playScenario, setPlayScenario] = useState("");
+  const [playMode, setPlayMode] = useState("preset");
+  const [playCustomProtocol, setPlayCustomProtocol] = useState("bitcoin-compact");
+  const [playCustomTopology, setPlayCustomTopology] = useState("random-regular");
+  const [playScaleFreeM, setPlayScaleFreeM] = useState(3);
   const [playBlockSize, setPlayBlockSize] = useState(BASE_BLOCK_SIZE);
   const [playBandwidth, setPlayBandwidth] = useState(BASE_BANDWIDTH);
   const [playLatency, setPlayLatency] = useState(BASE_LATENCY);
@@ -189,10 +193,10 @@ function App() {
 
   useEffect(() => {
     if (!rows.length) return;
-    if (!playScenario) {
+    if (playMode === "preset" && !playScenario) {
       setPlayScenario(rows[0].scenario);
     }
-  }, [rows, playScenario]);
+  }, [rows, playScenario, playMode]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -345,8 +349,11 @@ function App() {
   };
 
   const playgroundBase = useMemo(() => {
+    if (playMode !== "preset") {
+      return null;
+    }
     return rows.find((row) => row.scenario === playScenario);
-  }, [rows, playScenario]);
+  }, [rows, playScenario, playMode]);
 
   const playgroundApprox = useMemo(() => {
     if (!playgroundBase) return null;
@@ -381,31 +388,43 @@ function App() {
     setLiveLoading(true);
     setLiveError("");
     try {
+      const isCustom = playMode === "custom";
+      const protocol = isCustom
+        ? playCustomProtocol
+        : playgroundBase?.protocol ?? "two-phase";
+      const scenarioName = isCustom ? "custom" : playScenario;
+      const requestPayload = {
+        protocol,
+        scenario: scenarioName,
+        runs: 3,
+        seed: 42,
+        block_size_bytes: Math.round(playBlockSize),
+        bandwidth_mbps: playBandwidth,
+        latency_min: playLatency,
+        latency_max: playLatency,
+        mempool_overlap_mean: playOverlap,
+        mempool_overlap_std: 0.05,
+        churn_prob: playDisruption,
+        delay_prob: playDisruption,
+        delay_latency_mult: 2.0,
+        delay_bandwidth_mult: 0.7,
+      };
+      if (isCustom) {
+        requestPayload.topology = playCustomTopology;
+        if (playCustomTopology === "scale-free") {
+          requestPayload.scale_free_m = playScaleFreeM;
+        }
+      }
       const response = await fetch(SIM_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          protocol: playgroundBase?.protocol ?? "two-phase",
-          scenario: playScenario,
-          runs: 3,
-          seed: 42,
-          block_size_bytes: Math.round(playBlockSize),
-          bandwidth_mbps: playBandwidth,
-          latency_min: playLatency,
-          latency_max: playLatency,
-          mempool_overlap_mean: playOverlap,
-          mempool_overlap_std: 0.05,
-          churn_prob: playDisruption,
-          delay_prob: playDisruption,
-          delay_latency_mult: 2.0,
-          delay_bandwidth_mult: 0.7,
-        }),
+        body: JSON.stringify(requestPayload),
       });
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
       }
-      const payload = await response.json();
-      setLiveResult(payload.summary);
+      const responsePayload = await response.json();
+      setLiveResult(responsePayload.summary);
     } catch (err) {
       setLiveError(err.message || "Failed to run simulation.");
     } finally {
@@ -583,10 +602,21 @@ function App() {
             </div>
             <div className="playground-controls">
               <label>
+                Mode
+                <select
+                  value={playMode}
+                  onChange={(event) => setPlayMode(event.target.value)}
+                >
+                  <option value="preset">Preset scenario</option>
+                  <option value="custom">Custom config</option>
+                </select>
+              </label>
+              <label>
                 Scenario
                 <select
                   value={playScenario}
                   onChange={(event) => setPlayScenario(event.target.value)}
+                  disabled={playMode !== "preset"}
                 >
                   {scenarioOptions.map((value) => (
                     <option key={value} value={value}>
@@ -595,6 +625,55 @@ function App() {
                   ))}
                 </select>
               </label>
+              {playMode === "custom" && (
+                <>
+                  <label>
+                    Protocol
+                    <select
+                      value={playCustomProtocol}
+                      onChange={(event) =>
+                        setPlayCustomProtocol(event.target.value)
+                      }
+                    >
+                      {protocols.map((value) => (
+                        <option key={value} value={value}>
+                          {humanize(value)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Topology
+                    <select
+                      value={playCustomTopology}
+                      onChange={(event) =>
+                        setPlayCustomTopology(event.target.value)
+                      }
+                    >
+                      <option value="random-regular">Random regular</option>
+                      <option value="scale-free">Scale-free</option>
+                      <option value="small-world">Small-world</option>
+                      <option value="star">Star</option>
+                      <option value="line">Line</option>
+                    </select>
+                  </label>
+                  {playCustomTopology === "scale-free" && (
+                    <label>
+                      Scale-free m
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        step="1"
+                        value={playScaleFreeM}
+                        onChange={(event) =>
+                          setPlayScaleFreeM(Number(event.target.value))
+                        }
+                      />
+                    </label>
+                  )}
+                </>
+              )}
               <label>
                 Block size (MB)
                 <input
@@ -669,7 +748,11 @@ function App() {
                     <div>Messages: {formatNumber(playgroundApprox.messages, 0)}</div>
                   </>
                 ) : (
-                  <div>Pick a scenario to start.</div>
+                  <div>
+                    {playMode === "custom"
+                      ? "Approx is disabled for custom configs."
+                      : "Pick a scenario to start."}
+                  </div>
                 )}
               </div>
               <div className="playground-card">
@@ -752,7 +835,7 @@ function App() {
                         {formatDelta(row.delta, row.digits, compareMode)}
                       </strong>
                       <small>
-                        {formatNumber(row.baseVal, row.digits)} -> {formatNumber(row.targetVal, row.digits)}
+                        {formatNumber(row.baseVal, row.digits)}{" -> "}{formatNumber(row.targetVal, row.digits)}
                       </small>
                     </div>
                   ))}

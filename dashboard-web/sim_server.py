@@ -110,6 +110,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         overrides = _scenario_overrides(scenario)
         for key in (
+            "topology",
+            "scale_free_m",
             "block_size_bytes",
             "bandwidth_mbps",
             "latency_min",

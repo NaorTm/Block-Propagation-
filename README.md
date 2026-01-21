@@ -41,6 +41,26 @@ Run a scenario sweep and export CSV summaries:
 python experiments/run_series.py --runs 5 --seed 42
 ```
 
+## Scenario matrix
+
+The full test matrix in `experiments/run_all.py` uses the defaults in `src/config.py`
+unless listed in the table below.
+
+| Scenario | Protocol | Topology | Extra settings |
+| --- | --- | --- | --- |
+| baseline_naive | naive flooding | random-regular | defaults |
+| baseline_two_phase | two-phase announce/request | random-regular | defaults |
+| push_fanout | push gossip | random-regular | `gossip_fanout=4` |
+| pull_interval | pull gossip | random-regular | `pull_interval=0.5`, `pull_fanout=2`, `max_time=20` |
+| push_pull | push-pull gossip | random-regular | `gossip_fanout=4`, `pull_interval=0.5`, `max_time=20` |
+| scale_free | two-phase announce/request | scale-free | `scale_free_m=3` |
+| small_world | two-phase announce/request | small-world | `degree=8`, `rewire_prob=0.2` |
+| relay_overlay | two-phase announce/request | random-regular | `relay_fraction=0.2`, `relay_overlay_degree=2`, `relay_latency_mult=0.5`, `relay_bandwidth_mult=2.0` |
+| compact_blocks | bitcoin-compact (two-phase + compact) | random-regular | `mempool_overlap_mean=0.85`, `mempool_overlap_std=0.05` |
+| bottlenecks | two-phase announce/request | random-regular | `bottleneck_fraction=0.1`, `bottleneck_latency_mult=3.0`, `bottleneck_bandwidth_mult=0.5` |
+| churn_delay | push-pull gossip | random-regular | `churn_prob=0.1`, `churn_time_min=1.0`, `churn_time_max=3.0`, `delay_prob=0.2`, `delay_latency_mult=2.0`, `delay_bandwidth_mult=0.7`, `pull_interval=0.5`, `max_time=20` |
+| macro_metrics | two-phase announce/request | random-regular | defaults (macro metrics computed after run) |
+
 Run the full test matrix and plot results:
 
 ```bash

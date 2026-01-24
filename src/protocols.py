@@ -4,7 +4,7 @@ import heapq
 import math
 import random
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .config import SimulationConfig
 from .metrics import path_stats, threshold_time
@@ -43,6 +43,18 @@ def _neighbor_map(
         for n in overlay[node]:
             neighbors[n] = True
     return neighbors
+
+
+def _maybe_trace(
+    trace_events: List[Dict[str, Any]] | None,
+    time_value: float,
+    src: int,
+    dst: int,
+    kind: str,
+) -> None:
+    if trace_events is None:
+        return
+    trace_events.append({"time": time_value, "src": src, "dst": dst, "kind": kind})
 
 
 def _build_node_status(
@@ -109,6 +121,7 @@ def simulate_naive_flooding(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
+    trace_events: List[Dict[str, Any]] | None = None,
     network: NetworkData | None = None,
 ) -> RunResult:
     """
@@ -174,6 +187,7 @@ def simulate_naive_flooding(
             continue
 
         arrival_times[dst] = time
+        _maybe_trace(trace_events, time, src, dst, "block")
         if not will_forward[dst] or not _can_send(time, failure_times, dst):
             continue
         for neighbor, is_overlay in _neighbor_map(
@@ -233,6 +247,7 @@ def simulate_two_phase(
     rng: random.Random,
     include_path_stats: bool = False,
     compact_blocks: bool = False,
+    trace_events: List[Dict[str, Any]] | None = None,
     network: NetworkData | None = None,
 ) -> RunResult:
     """
@@ -355,6 +370,7 @@ def simulate_two_phase(
                 continue
             has_full_block[dst] = True
             arrival_times[dst] = time
+            _maybe_trace(trace_events, time, src, dst, event_type)
 
             if will_forward[dst] and _can_send(time, failure_times, dst):
                 for neighbor, is_overlay in _neighbor_map(
@@ -436,6 +452,7 @@ def simulate_push(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
+    trace_events: List[Dict[str, Any]] | None = None,
     network: NetworkData | None = None,
 ) -> RunResult:
     """
@@ -503,6 +520,7 @@ def simulate_push(
         if math.isfinite(arrival_times[dst]):
             continue
         arrival_times[dst] = time
+        _maybe_trace(trace_events, time, src, dst, "block")
         if not will_forward[dst] or not _can_send(time, failure_times, dst):
             continue
         neighbors = _select_neighbors(network.adjacency, dst, rng, config.gossip_fanout)
@@ -562,6 +580,7 @@ def simulate_pull(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
+    trace_events: List[Dict[str, Any]] | None = None,
     network: NetworkData | None = None,
 ) -> RunResult:
     """
@@ -654,6 +673,7 @@ def simulate_pull(
                 continue
             has_full_block[dst] = True
             arrival_times[dst] = time
+            _maybe_trace(trace_events, time, src, dst, "block")
         else:
             raise ValueError(f"Unknown event type: {event_type}")
 
@@ -696,6 +716,7 @@ def simulate_push_pull(
     config: SimulationConfig,
     rng: random.Random,
     include_path_stats: bool = False,
+    trace_events: List[Dict[str, Any]] | None = None,
     network: NetworkData | None = None,
 ) -> RunResult:
     """
@@ -812,6 +833,7 @@ def simulate_push_pull(
                 continue
             has_full_block[dst] = True
             arrival_times[dst] = time
+            _maybe_trace(trace_events, time, src, dst, "block")
             if will_forward[dst] and _can_send(time, failure_times, dst):
                 send_push(dst, time)
         else:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import {
   Area,
@@ -20,6 +20,7 @@ import "./App.css";
 
 const DATA_URL = "/data/all_tests_summary.csv";
 const SIM_URL = "http://localhost:8000/simulate";
+const TRACE_URL = "http://localhost:8000/simulate_trace";
 const POLL_MS = 300000;
 const BASE_BLOCK_SIZE = 1_000_000;
 const BASE_BANDWIDTH = 10;
@@ -119,6 +120,7 @@ function App() {
   const [playMode, setPlayMode] = useState("preset");
   const [playCustomProtocol, setPlayCustomProtocol] = useState("bitcoin-compact");
   const [playCustomTopology, setPlayCustomTopology] = useState("random-regular");
+  const [playNodes, setPlayNodes] = useState(500);
   const [playScaleFreeM, setPlayScaleFreeM] = useState(3);
   const [playBlockSize, setPlayBlockSize] = useState(BASE_BLOCK_SIZE);
   const [playBandwidth, setPlayBandwidth] = useState(BASE_BANDWIDTH);
@@ -128,12 +130,32 @@ function App() {
   const [liveResult, setLiveResult] = useState(null);
   const [liveError, setLiveError] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
+  const [traceData, setTraceData] = useState(null);
+  const [traceError, setTraceError] = useState("");
+  const [traceLoading, setTraceLoading] = useState(false);
+  const [traceTime, setTraceTime] = useState(0);
+  const [tracePlaying, setTracePlaying] = useState(false);
+  const [traceSpeed, setTraceSpeed] = useState(1);
+  const traceCanvasRef = useRef(null);
+  const traceWrapRef = useRef(null);
+  const [traceSize, setTraceSize] = useState({ width: 0, height: 0 });
   const [chartOrder, setChartOrder] = useState("sorted");
   const [randomSeed, setRandomSeed] = useState(1);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const resize = () => {
+      if (!traceWrapRef.current) return;
+      const width = traceWrapRef.current.clientWidth || 0;
+      setTraceSize({ width, height: 460 });
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
 
   useEffect(() => {
     let intervalId = null;
@@ -197,6 +219,14 @@ function App() {
       setPlayScenario(rows[0].scenario);
     }
   }, [rows, playScenario, playMode]);
+
+  useEffect(() => {
+    if (playMode === "custom") return;
+    setTraceData(null);
+    setTraceError("");
+    setTracePlaying(false);
+    setTraceTime(0);
+  }, [playMode]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -384,9 +414,142 @@ function App() {
     playOverlap,
   ]);
 
+  const traceMaxTime = traceData?.meta?.max_time ?? 0;
+
+  const traceNodeMap = useMemo(() => {
+    if (!traceData?.graph?.nodes) return null;
+    const map = new Map();
+    traceData.graph.nodes.forEach((node) => {
+      map.set(node.id, node);
+    });
+    return map;
+  }, [traceData]);
+
+  const traceArrival = useMemo(() => {
+    if (!traceData?.events) return null;
+    const map = new Map();
+    traceData.events.forEach((event) => {
+      const current = map.get(event.dst);
+      if (current === undefined || event.time < current) {
+        map.set(event.dst, event.time);
+      }
+    });
+    if (!map.has(0)) {
+      map.set(0, 0);
+    }
+    return map;
+  }, [traceData]);
+
+  useEffect(() => {
+    if (!traceData) return;
+    setTraceTime(0);
+    setTracePlaying(true);
+  }, [traceData]);
+
+  useEffect(() => {
+    if (!traceData || !tracePlaying || traceMaxTime <= 0) return;
+    let frame = null;
+    let last = performance.now();
+
+    const step = (now) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      setTraceTime((prev) => {
+        const next = prev + dt * traceSpeed;
+        if (next >= traceMaxTime) {
+          setTracePlaying(false);
+          return traceMaxTime;
+        }
+        return next;
+      });
+      frame = requestAnimationFrame(step);
+    };
+
+    frame = requestAnimationFrame(step);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [traceData, tracePlaying, traceSpeed, traceMaxTime]);
+
+  useEffect(() => {
+    if (!traceData || !traceCanvasRef.current || !traceNodeMap) return;
+    const canvas = traceCanvasRef.current;
+    const { width, height } = traceSize;
+    if (!width || !height) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const rootStyle = getComputedStyle(document.documentElement);
+    const baseEdge = rootStyle.getPropertyValue("--grid").trim() || "#2a2d3a";
+    const relayEdge = rootStyle.getPropertyValue("--accent-3").trim() || "#f77f00";
+    const activeEdge = rootStyle.getPropertyValue("--accent").trim() || "#7ad7f0";
+    const arrivedNode = rootStyle.getPropertyValue("--accent-2").trim() || "#ff7a59";
+    const idleNode = rootStyle.getPropertyValue("--muted").trim() || "#4b5563";
+    const bottleneckStroke = "#ef4444";
+
+    ctx.clearRect(0, 0, width, height);
+
+    const pad = 24;
+    const scaleX = (x) => pad + x * (width - pad * 2);
+    const scaleY = (y) => pad + y * (height - pad * 2);
+    const radius = Math.max(2.5, Math.min(6, width / 200));
+
+    ctx.globalAlpha = 0.35;
+    traceData.graph.edges.forEach((edge) => {
+      const src = traceNodeMap.get(edge.source);
+      const dst = traceNodeMap.get(edge.target);
+      if (!src || !dst) return;
+      ctx.strokeStyle = edge.type === "relay" ? relayEdge : baseEdge;
+      ctx.lineWidth = edge.type === "relay" ? 1.6 : 1.0;
+      ctx.beginPath();
+      ctx.moveTo(scaleX(src.x), scaleY(src.y));
+      ctx.lineTo(scaleX(dst.x), scaleY(dst.y));
+      ctx.stroke();
+    });
+
+    const pulseWindow = Math.max(0.05, traceMaxTime * 0.02);
+    const activeEvents = traceData.events.filter(
+      (event) =>
+        event.time <= traceTime && event.time >= traceTime - pulseWindow
+    );
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = activeEdge;
+    ctx.lineWidth = 2.2;
+    activeEvents.forEach((event) => {
+      const src = traceNodeMap.get(event.src);
+      const dst = traceNodeMap.get(event.dst);
+      if (!src || !dst) return;
+      ctx.beginPath();
+      ctx.moveTo(scaleX(src.x), scaleY(src.y));
+      ctx.lineTo(scaleX(dst.x), scaleY(dst.y));
+      ctx.stroke();
+    });
+
+    ctx.globalAlpha = 1.0;
+    traceData.graph.nodes.forEach((node) => {
+      const arrivedAt = traceArrival?.get(node.id);
+      const isArrived = arrivedAt !== undefined && arrivedAt <= traceTime;
+      ctx.fillStyle = isArrived ? arrivedNode : idleNode;
+      ctx.beginPath();
+      ctx.arc(scaleX(node.x), scaleY(node.y), radius, 0, Math.PI * 2);
+      ctx.fill();
+      if (node.relay || node.bottleneck || node.id === 0) {
+        ctx.lineWidth = node.id === 0 ? 2.4 : 1.6;
+        ctx.strokeStyle = node.bottleneck ? bottleneckStroke : "#ffffff";
+        ctx.stroke();
+      }
+    });
+  }, [traceData, traceTime, traceArrival, traceNodeMap, traceMaxTime, traceSize, theme]);
+
   const runLiveSim = async () => {
     setLiveLoading(true);
     setLiveError("");
+    setTraceError("");
+    if (playMode === "custom") {
+      setTraceLoading(true);
+    }
     try {
       const isCustom = playMode === "custom";
       const protocol = isCustom
@@ -411,11 +574,12 @@ function App() {
       };
       if (isCustom) {
         requestPayload.topology = playCustomTopology;
+        requestPayload.nodes = playNodes;
         if (playCustomTopology === "scale-free") {
           requestPayload.scale_free_m = playScaleFreeM;
         }
       }
-      const response = await fetch(SIM_URL, {
+      const response = await fetch(isCustom ? TRACE_URL : SIM_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestPayload),
@@ -424,15 +588,28 @@ function App() {
         throw new Error(`Server error: ${response.status}`);
       }
       const responsePayload = await response.json();
+      if (responsePayload.error) {
+        throw new Error(responsePayload.error);
+      }
       setLiveResult(responsePayload.summary);
+      if (isCustom) {
+        setTraceData(responsePayload);
+      } else {
+        setTraceData(null);
+      }
     } catch (err) {
       setLiveError(err.message || "Failed to run simulation.");
+      if (playMode === "custom") {
+        setTraceError(err.message || "Failed to run trace.");
+      }
     } finally {
       setLiveLoading(false);
+      setTraceLoading(false);
     }
   };
 
   const resetPlayground = () => {
+    setPlayNodes(500);
     setPlayBlockSize(BASE_BLOCK_SIZE);
     setPlayBandwidth(BASE_BANDWIDTH);
     setPlayLatency(BASE_LATENCY);
@@ -440,6 +617,10 @@ function App() {
     setPlayDisruption(0);
     setLiveResult(null);
     setLiveError("");
+    setTraceData(null);
+    setTraceError("");
+    setTracePlaying(false);
+    setTraceTime(0);
   };
 
   const toggleProtocol = (protocol) => {
@@ -448,6 +629,13 @@ function App() {
         ? prev.filter((item) => item !== protocol)
         : [...prev, protocol]
     );
+  };
+
+  const canTrace = !!traceData && traceMaxTime > 0;
+
+  const handleTraceScrub = (event) => {
+    setTraceTime(Number(event.target.value));
+    setTracePlaying(false);
   };
 
   return (
@@ -628,6 +816,19 @@ function App() {
               {playMode === "custom" && (
                 <>
                   <label>
+                    Nodes
+                    <input
+                      type="number"
+                      min="20"
+                      max="2000"
+                      step="10"
+                      value={playNodes}
+                      onChange={(event) =>
+                        setPlayNodes(Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <label>
                     Protocol
                     <select
                       value={playCustomProtocol}
@@ -774,7 +975,11 @@ function App() {
                   onClick={runLiveSim}
                   disabled={liveLoading}
                 >
-                  {liveLoading ? "Running..." : "Run exact simulation"}
+                  {liveLoading
+                    ? "Running..."
+                    : playMode === "custom"
+                    ? "Run exact simulation + trace"
+                    : "Run exact simulation"}
                 </button>
                 <button
                   className="ghost"
@@ -786,6 +991,107 @@ function App() {
                 <p className="hint">Server: python dashboard-web/sim_server.py</p>
               </div>
             </div>
+          </section>
+
+          <section className="trace panel">
+            <div className="panel-header">
+              <h3>Propagation Replay</h3>
+              <p>
+                Accurate live trace for custom configs. Nodes light up as they
+                receive the block, edges pulse on delivery.
+              </p>
+            </div>
+            <div className="trace-controls">
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => setTracePlaying((prev) => !prev)}
+                disabled={!canTrace}
+              >
+                {tracePlaying ? "Pause" : "Play"}
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => {
+                  setTraceTime(0);
+                  setTracePlaying(false);
+                }}
+                disabled={!canTrace}
+              >
+                Reset
+              </button>
+              <label>
+                Time
+                <input
+                  type="range"
+                  min="0"
+                  max={traceMaxTime || 0}
+                  step={traceMaxTime ? traceMaxTime / 200 : 0.01}
+                  value={Math.min(traceTime, traceMaxTime || 0)}
+                  onChange={handleTraceScrub}
+                  disabled={!canTrace}
+                />
+                <span>
+                  {traceTime.toFixed(2)}s / {traceMaxTime.toFixed(2)}s
+                </span>
+              </label>
+              <label>
+                Speed
+                <select
+                  value={traceSpeed}
+                  onChange={(event) => setTraceSpeed(Number(event.target.value))}
+                  disabled={!canTrace}
+                >
+                  <option value={0.25}>0.25x</option>
+                  <option value={0.5}>0.5x</option>
+                  <option value={1}>1x</option>
+                  <option value={2}>2x</option>
+                  <option value={4}>4x</option>
+                </select>
+              </label>
+              <div className="trace-meta">
+                {traceData?.meta ? (
+                  <>
+                    <span>{humanize(traceData.meta.protocol)}</span>
+                    <span>{humanize(traceData.meta.topology)}</span>
+                    <span>Seed {traceData.meta.seed ?? "--"}</span>
+                  </>
+                ) : (
+                  <span>Run a custom simulation to generate a trace.</span>
+                )}
+              </div>
+            </div>
+            <div className="trace-canvas" ref={traceWrapRef}>
+              <canvas ref={traceCanvasRef} />
+              {!canTrace && !traceLoading && (
+                <div className="trace-empty">
+                  Run "exact simulation + trace" in Custom mode to render the propagation.
+                </div>
+              )}
+              {traceLoading && <div className="trace-empty">Rendering trace...</div>}
+            </div>
+            <div className="trace-legend">
+              <span className="legend-item">
+                <span className="legend-dot idle" /> Not received
+              </span>
+              <span className="legend-item">
+                <span className="legend-dot arrived" /> Received
+              </span>
+              <span className="legend-item">
+                <span className="legend-line base" /> Base edge
+              </span>
+              <span className="legend-item">
+                <span className="legend-line relay" /> Relay edge
+              </span>
+              <span className="legend-item">
+                <span className="legend-ring source" /> Source node
+              </span>
+              <span className="legend-item">
+                <span className="legend-ring bottleneck" /> Bottleneck node
+              </span>
+            </div>
+            {traceError && <div className="banner error">{traceError}</div>}
           </section>
 
           <section className="comparison panel">

@@ -491,6 +491,131 @@
   color: var(--muted);
 }
 
+.trace-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.trace-controls label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.trace-controls select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+}
+
+.trace-controls input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.trace-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.trace-canvas {
+  margin-top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  height: 460px;
+}
+
+.trace-canvas canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.trace-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent);
+}
+
+.trace-legend {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--muted);
+}
+
+.legend-dot.arrived {
+  background: var(--accent-2);
+}
+
+.legend-dot.idle {
+  background: var(--muted);
+}
+
+.legend-line {
+  width: 18px;
+  height: 2px;
+  display: inline-block;
+  background: var(--grid);
+}
+
+.legend-line.base {
+  background: var(--grid);
+}
+
+.legend-line.relay {
+  background: var(--accent-3);
+}
+
+.legend-ring {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  display: inline-block;
+}
+
+.legend-ring.source {
+  border-color: #ffffff;
+}
+
+.legend-ring.bottleneck {
+  border-color: #ef4444;
+}
+
 .tooltip-card {
   background: var(--card);
   border: 1px solid var(--border);

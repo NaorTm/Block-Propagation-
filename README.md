@@ -173,3 +173,16 @@ Tested with Python 3.11. Install dependencies with:
 ```bash
 pip install -r requirements.txt
 ```
+
+### Local simulation service
+
+The optional Playground API binds to `127.0.0.1:8000` and accepts browser requests from the local Vite development UI on port 5173. It is intended for local experiments, not public deployment. Requests are limited to 20 runs, 1,000 nodes, and a 16 KiB JSON body. Vite uses port 5173 strictly; stop any process already using it before starting the dashboard.
+
+For a small reproducible smoke test:
+
+```sh
+python simulation.py --protocol naive --nodes 50 --degree 4 --runs 1 --seed 42
+```
+
+An example run produced T50 2.688 s, T90 3.579 s, T100 3.668 s and 200 block messages. These are simulated measurements for this configuration, not measurements from a production network.
+

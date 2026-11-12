@@ -187,20 +187,38 @@ def _simulate_trace(protocol: str, config: SimulationConfig, seed: int | None) -
     }
 
 
+# Development service: accept browser requests only from the local Vite UI.
+ALLOWED_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173"}
+MAX_BODY_BYTES = 16_384
+
+
 class _Handler(BaseHTTPRequestHandler):
+    def _allow_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        return origin is None or origin in ALLOWED_ORIGINS
+
+    def _cors_headers(self) -> None:
+        origin = self.headers.get("Origin")
+        if origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
     def _send_json(self, payload: Dict[str, Any], status: int = 200) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors_headers()
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self) -> None:
+        if not self._allow_origin():
+            self.send_error(403)
+            return
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors_headers()
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         self.end_headers()
@@ -212,20 +230,35 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json({"status": "ok"})
 
     def do_POST(self) -> None:
+        if not self._allow_origin():
+            self._send_json({"error": "origin_not_allowed"}, status=403)
+            return
         if self.path not in ("/simulate", "/simulate_trace"):
             self._send_json({"error": "not_found"}, status=404)
             return
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length).decode("utf-8")
         try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 0 or length > MAX_BODY_BYTES:
+                self._send_json({"error": "invalid_body_size"}, status=413)
+                return
+            raw = self.rfile.read(length).decode("utf-8")
             data = json.loads(raw or "{}")
-        except json.JSONDecodeError:
+            if not isinstance(data, dict):
+                raise ValueError("JSON object required")
+        except (ValueError, UnicodeDecodeError):
             self._send_json({"error": "invalid_json"}, status=400)
             return
 
         protocol = data.get("protocol", "two-phase")
         scenario = data.get("scenario", "")
-        runs = int(data.get("runs", 3))
+        try:
+            runs = int(data.get("runs", 3))
+            nodes = int(data.get("nodes", data.get("num_nodes", 500)))
+            if not 1 <= runs <= 20 or not 2 <= nodes <= 1000:
+                raise ValueError("runs or nodes out of range")
+        except (TypeError, ValueError, OverflowError):
+            self._send_json({"error": "invalid_runs_or_nodes"}, status=400)
+            return
         seed = data.get("seed", 42)
 
         overrides = _scenario_overrides(scenario)
@@ -272,7 +305,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    server = HTTPServer(("0.0.0.0", 8000), _Handler)
+    server = HTTPServer(("127.0.0.1", 8000), _Handler)
     print("Simulation server running on http://localhost:8000")
     try:
         server.serve_forever()
@@ -282,3 +315,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

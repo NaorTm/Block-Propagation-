@@ -820,7 +820,7 @@ function App() {
                     <input
                       type="number"
                       min="20"
-                      max="2000"
+                      max="1000"
                       step="10"
                       value={playNodes}
                       onChange={(event) =>
